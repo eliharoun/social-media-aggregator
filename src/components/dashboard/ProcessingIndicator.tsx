@@ -37,13 +37,8 @@ export function ProcessingIndicator({ status, size = 'sm' }: ProcessingIndicator
   }
 
   if (status.hasTranscript && status.hasSummary) {
-    return (
-      <div className={`${iconSize} text-green-500 bg-green-50 rounded-full p-1 shadow-sm`} title="AI summary ready">
-        <svg className="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      </div>
-    )
+    // Hide the indicator once processing is complete
+    return null
   }
 
   if (status.hasTranscript) {

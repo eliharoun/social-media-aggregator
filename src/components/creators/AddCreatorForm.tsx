@@ -16,7 +16,11 @@ export function AddCreatorForm({ onAdd, loading }: AddCreatorFormProps) {
     { 
       id: 'tiktok', 
       name: 'TikTok', 
-      icon: '🎵',
+      icon: (
+        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-.88-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43V7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.43z"/>
+        </svg>
+      ),
       placeholder: '@username',
       color: 'bg-pink-500',
       enabled: true
@@ -24,7 +28,11 @@ export function AddCreatorForm({ onAdd, loading }: AddCreatorFormProps) {
     { 
       id: 'youtube', 
       name: 'YouTube', 
-      icon: '📺',
+      icon: (
+        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+        </svg>
+      ),
       placeholder: '@channelname or channel URL',
       color: 'bg-red-500',
       enabled: false,
@@ -33,7 +41,11 @@ export function AddCreatorForm({ onAdd, loading }: AddCreatorFormProps) {
     { 
       id: 'instagram', 
       name: 'Instagram', 
-      icon: '📸',
+      icon: (
+        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+        </svg>
+      ),
       placeholder: '@username',
       color: 'bg-purple-500',
       enabled: false,
@@ -70,87 +82,83 @@ export function AddCreatorForm({ onAdd, loading }: AddCreatorFormProps) {
   const selectedPlatform = platforms.find(p => p.id === platform)
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-      <h2 className="text-xl font-semibold text-gray-800 mb-6">Add New Creator</h2>
-      
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Platform Selection */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">
-            Select Platform
-          </label>
-          <div className="grid grid-cols-3 gap-3">
-            {platforms.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => p.enabled && setPlatform(p.id as 'tiktok' | 'youtube' | 'instagram')}
-                disabled={!p.enabled}
-                className={`p-4 rounded-lg border-2 transition-all relative ${
-                  platform === p.id && p.enabled
-                    ? `border-pink-500 bg-pink-50 ${p.color} text-white`
-                    : p.enabled
-                    ? 'border-gray-200 hover:border-gray-300 bg-white'
-                    : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
-                }`}
-              >
-                <div className="text-center">
-                  <div className="text-2xl mb-2">{p.icon}</div>
-                  <div className={`font-medium ${
-                    platform === p.id && p.enabled 
-                      ? 'text-white' 
-                      : p.enabled 
-                      ? 'text-gray-800'
-                      : 'text-gray-500'
-                  }`}>
-                    {p.name}
-                  </div>
-                  {p.comingSoon && (
-                    <div className="text-xs text-gray-400 mt-1">
-                      Coming Soon
-                    </div>
-                  )}
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Platform Selection */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-3">
+          Select Platform
+        </label>
+        <div className="grid grid-cols-3 gap-3">
+          {platforms.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => p.enabled && setPlatform(p.id as 'tiktok' | 'youtube' | 'instagram')}
+              disabled={!p.enabled}
+              className={`p-4 rounded-lg border-2 transition-all relative ${
+                platform === p.id && p.enabled
+                  ? `border-pink-500 bg-pink-50 ${p.color} text-white`
+                  : p.enabled
+                  ? 'border-gray-200 hover:border-gray-300 bg-white'
+                  : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+              }`}
+            >
+              <div className="text-center">
+                <div className="mb-2 flex justify-center">{p.icon}</div>
+                <div className={`font-medium ${
+                  platform === p.id && p.enabled 
+                    ? 'text-white' 
+                    : p.enabled 
+                    ? 'text-gray-800'
+                    : 'text-gray-500'
+                }`}>
+                  {p.name}
                 </div>
-              </button>
-            ))}
+                {p.comingSoon && (
+                  <div className="text-xs text-gray-400 mt-1">
+                    Coming Soon
+                  </div>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Username Input */}
+      <div>
+        <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+          {selectedPlatform?.name} Username
+        </label>
+        <div className="relative">
+          <input
+            id="username"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder={selectedPlatform?.placeholder}
+            className="w-full px-4 py-3 pr-12 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none transition-colors"
+            disabled={loading}
+          />
+          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+            {selectedPlatform?.icon}
           </div>
         </div>
+      </div>
 
-        {/* Username Input */}
-        <div>
-          <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-            {selectedPlatform?.name} Username
-          </label>
-          <div className="relative">
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder={selectedPlatform?.placeholder}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none transition-colors"
-              disabled={loading}
-            />
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-              <span className="text-2xl">{selectedPlatform?.icon}</span>
-            </div>
-          </div>
+      {error && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-lg p-3 text-red-700 text-sm">
+          {error}
         </div>
+      )}
 
-        {error && (
-          <div className="bg-red-50 border-2 border-red-200 rounded-lg p-3 text-red-700 text-sm">
-            {error}
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={loading || !username.trim()}
-          className="w-full py-3 px-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-lg font-semibold hover:from-pink-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-        >
-          {loading ? 'Adding Creator...' : `Add ${selectedPlatform?.name} Creator`}
-        </button>
-      </form>
-    </div>
+      <button
+        type="submit"
+        disabled={loading || !username.trim()}
+        className="w-full py-3 px-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-lg font-semibold hover:from-pink-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+      >
+        {loading ? 'Adding Creator...' : `Add ${selectedPlatform?.name} Creator`}
+      </button>
+    </form>
   )
 }

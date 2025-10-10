@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Layout } from '@/components/layout/Layout'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/components/auth/AuthProvider'
 
 interface UserSettings {
   id?: string
@@ -33,12 +35,24 @@ const DEFAULT_SETTINGS: UserSettings = {
 export default function SettingsPage() {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [activeTab, setActiveTab] = useState('tiktok')
   const [message, setMessage] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const router = useRouter()
+  const { user, signOut } = useAuth()
 
   useEffect(() => {
     loadSettings()
   }, [])
+
+  // Auto-save when settings change
+  useEffect(() => {
+    if (!loading) {
+      saveSettings()
+    }
+  }, [settings, loading])
 
   const loadSettings = async () => {
     try {
@@ -65,7 +79,7 @@ export default function SettingsPage() {
 
   const saveSettings = async () => {
     try {
-      setSaving(true)
+      setSaveStatus('saving')
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
@@ -83,16 +97,16 @@ export default function SettingsPage() {
 
       if (error) {
         console.error('Error saving settings:', error)
-        setMessage('Failed to save settings')
+        setSaveStatus('error')
       } else {
-        setMessage('Settings saved successfully! Go to your feed and click "Refresh Feed" to see the changes.')
-        setTimeout(() => setMessage(''), 5000)
+        setSaveStatus('saved')
+        // Reset to idle after showing saved status
+        setTimeout(() => setSaveStatus('idle'), 2000)
       }
     } catch (err) {
       console.error('Failed to save settings:', err)
-      setMessage('Failed to save settings')
-    } finally {
-      setSaving(false)
+      setSaveStatus('error')
+      setTimeout(() => setSaveStatus('idle'), 3000)
     }
   }
 
@@ -107,11 +121,127 @@ export default function SettingsPage() {
     }))
   }
 
-  const resetToDefaults = () => {
-    setSettings(DEFAULT_SETTINGS)
-    setMessage('Settings reset to defaults')
-    setTimeout(() => setMessage(''), 3000)
+  const clearCache = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      // Clear content cache
+      const { data: userCreators } = await supabase
+        .from('favorite_creators')
+        .select('username')
+        .eq('user_id', session.user.id)
+
+      if (userCreators) {
+        const usernames = userCreators.map(c => c.username)
+        
+        // Get content IDs first
+        const { data: userContent } = await supabase
+          .from('content')
+          .select('id')
+          .in('creator_username', usernames)
+
+        if (userContent && userContent.length > 0) {
+          const contentIds = userContent.map(c => c.id)
+          
+          // Delete summaries
+          await supabase
+            .from('summaries')
+            .delete()
+            .in('content_id', contentIds)
+
+          // Delete transcripts
+          await supabase
+            .from('transcripts')
+            .delete()
+            .in('content_id', contentIds)
+        }
+
+        // Delete content
+        await supabase
+          .from('content')
+          .delete()
+          .in('creator_username', usernames)
+      }
+
+      // Clear local storage
+      localStorage.removeItem('readItems')
+      localStorage.removeItem('savedItems')
+      localStorage.removeItem('cacheHits')
+      localStorage.removeItem('cacheTotal')
+
+      setMessage('Cache cleared successfully! Refresh your feed to fetch new content.')
+      setTimeout(() => setMessage(''), 5000)
+    } catch (err) {
+      setMessage('Failed to clear cache')
+      setTimeout(() => setMessage(''), 3000)
+    }
   }
+
+  const deleteAccount = async () => {
+    if (!confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      // Delete user data
+      await supabase.from('user_settings').delete().eq('user_id', session.user.id)
+      await supabase.from('favorite_creators').delete().eq('user_id', session.user.id)
+      
+      // Sign out and delete auth user
+      await supabase.auth.signOut()
+      
+      // Redirect to home page
+      router.push('/')
+    } catch (err) {
+      setMessage('Failed to delete account')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const platforms = [
+    { 
+      key: 'tiktok', 
+      name: 'TikTok', 
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-.88-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43V7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.43z"/>
+        </svg>
+      ),
+      enabled: true,
+      description: 'Short-form video content with AI transcription and summarization'
+    },
+    { 
+      key: 'youtube', 
+      name: 'YouTube', 
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+        </svg>
+      ),
+      enabled: false,
+      description: 'Video content and shorts - Coming Soon'
+    },
+    { 
+      key: 'instagram', 
+      name: 'Instagram', 
+      icon: (
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+        </svg>
+      ),
+      enabled: false,
+      description: 'Photos, reels, and stories - Coming Soon'
+    }
+  ]
+
+  const activePlatform = platforms.find(p => p.key === activeTab)
 
   if (loading) {
     return (
@@ -135,14 +265,9 @@ export default function SettingsPage() {
   return (
     <Layout>
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-4">Settings</h1>
-          <p className="text-gray-600">Configure your content preferences and platform settings</p>
-        </div>
-
         {message && (
           <div className={`mb-6 p-4 rounded-lg ${
-            message.includes('success') 
+            message.includes('success') || message.includes('cleared')
               ? 'bg-green-50 border border-green-200 text-green-700'
               : 'bg-red-50 border border-red-200 text-red-700'
           }`}>
@@ -150,119 +275,175 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* Save Status Indicator */}
+        {saveStatus !== 'idle' && (
+          <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg transition-all ${
+            saveStatus === 'saving' ? 'bg-blue-50 border border-blue-200 text-blue-700' :
+            saveStatus === 'saved' ? 'bg-green-50 border border-green-200 text-green-700' :
+            'bg-red-50 border border-red-200 text-red-700'
+          }`}>
+            <div className="flex items-center gap-2">
+              {saveStatus === 'saving' && (
+                <>
+                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-sm font-medium">Saving...</span>
+                </>
+              )}
+              {saveStatus === 'saved' && (
+                <>
+                  <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-sm font-medium">Settings saved</span>
+                </>
+              )}
+              {saveStatus === 'error' && (
+                <>
+                  <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm font-medium">Save failed</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="space-y-8">
-          {/* Platform Settings */}
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-6">Platform Configuration</h2>
-            
-            {/* Enabled Platforms */}
-            <div className="mb-6">
-              <h3 className="text-lg font-medium text-gray-800 mb-3">Enabled Platforms</h3>
-              <div className="space-y-3">
-                {[
-                  { key: 'tiktok', name: 'TikTok', icon: '🎵', description: 'Short-form video content' },
-                  { key: 'youtube', name: 'YouTube', icon: '📺', description: 'Video content and shorts' },
-                  { key: 'instagram', name: 'Instagram', icon: '📸', description: 'Photos, reels, and stories' }
-                ].map(platform => (
-                  <label key={platform.key} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={settings.enabled_platforms.includes(platform.key)}
-                      onChange={() => handlePlatformToggle(platform.key)}
-                      className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                    />
-                    <span className="text-lg">{platform.icon}</span>
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-800">{platform.name}</div>
-                      <div className="text-sm text-gray-600">{platform.description}</div>
+          {/* Platform Tabs */}
+          <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+            <div className="border-b border-gray-200">
+              <nav className="flex w-full">
+                {platforms.map((platform) => (
+                  <button
+                    key={platform.key}
+                    onClick={() => setActiveTab(platform.key)}
+                    disabled={!platform.enabled}
+                    className={`flex-1 px-2 sm:px-6 py-4 text-sm font-medium transition-colors relative ${
+                      activeTab === platform.key
+                        ? 'text-purple-600 bg-purple-50 border-b-2 border-purple-600'
+                        : platform.enabled
+                        ? 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                        : 'text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
+                      <div className="text-base sm:text-xl">{platform.icon}</div>
+                      <div className="flex flex-col sm:flex-row items-center gap-1">
+                        <span className="text-xs sm:text-sm font-medium text-center">{platform.name}</span>
+                        {!platform.enabled && (
+                          <span className="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">
+                            Soon
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </label>
+                  </button>
                 ))}
-              </div>
+              </nav>
             </div>
 
-            {/* Date Range Settings */}
-            <div className="grid md:grid-cols-3 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  🎵 TikTok Date Range
-                </label>
-                <select
-                  value={settings.tiktok_date_range_days}
-                  onChange={(e) => setSettings(prev => ({ ...prev, tiktok_date_range_days: parseInt(e.target.value) }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                >
-                  <option value={1}>Last 1 day</option>
-                  <option value={3}>Last 3 days</option>
-                  <option value={7}>Last 7 days</option>
-                  <option value={14}>Last 14 days</option>
-                  <option value={30}>Last 30 days</option>
-                </select>
+            {/* Platform Settings Content */}
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <span className="text-2xl">{activePlatform?.icon}</span>
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-800">{activePlatform?.name} Settings</h2>
+                  <p className="text-sm text-gray-600">{activePlatform?.description}</p>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📺 YouTube Date Range
-                </label>
-                <select
-                  value={settings.youtube_date_range_days}
-                  onChange={(e) => setSettings(prev => ({ ...prev, youtube_date_range_days: parseInt(e.target.value) }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                >
-                  <option value={1}>Last 1 day</option>
-                  <option value={3}>Last 3 days</option>
-                  <option value={7}>Last 7 days</option>
-                  <option value={14}>Last 14 days</option>
-                  <option value={30}>Last 30 days</option>
-                </select>
-              </div>
+              {activePlatform?.enabled ? (
+                <div className="space-y-6">
+                  {/* Platform Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-800">Enable {activePlatform.name}</h3>
+                      <p className="text-sm text-gray-600">Include content from {activePlatform.name} in your feed</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.enabled_platforms.includes(activeTab)}
+                        onChange={() => handlePlatformToggle(activeTab)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📸 Instagram Date Range
-                </label>
-                <select
-                  value={settings.instagram_date_range_days}
-                  onChange={(e) => setSettings(prev => ({ ...prev, instagram_date_range_days: parseInt(e.target.value) }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                >
-                  <option value={1}>Last 1 day</option>
-                  <option value={3}>Last 3 days</option>
-                  <option value={7}>Last 7 days</option>
-                  <option value={14}>Last 14 days</option>
-                  <option value={30}>Last 30 days</option>
-                </select>
-              </div>
-            </div>
+                  {settings.enabled_platforms.includes(activeTab) && (
+                    <>
+                      {/* Date Range */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Content Date Range
+                        </label>
+                        <select
+                          value={settings[`${activeTab}_date_range_days` as keyof UserSettings] as number}
+                          onChange={(e) => setSettings(prev => ({ 
+                            ...prev, 
+                            [`${activeTab}_date_range_days`]: parseInt(e.target.value) 
+                          }))}
+                          className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        >
+                          <option value={1}>Last 1 day</option>
+                          <option value={3}>Last 3 days</option>
+                          <option value={7}>Last 7 days</option>
+                          <option value={14}>Last 14 days</option>
+                          <option value={30}>Last 30 days</option>
+                        </select>
+                        <p className="text-sm text-gray-600 mt-1">
+                          How far back to fetch content from this platform
+                        </p>
+                      </div>
 
-            {/* Content Limits */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Max Content Per Creator
-              </label>
-              <select
-                value={settings.max_content_per_creator}
-                onChange={(e) => setSettings(prev => ({ ...prev, max_content_per_creator: parseInt(e.target.value) }))}
-                className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              >
-                <option value={5}>5 items</option>
-                <option value={10}>10 items</option>
-                <option value={15}>15 items</option>
-                <option value={20}>20 items</option>
-                <option value={50}>50 items</option>
-              </select>
-              <p className="text-sm text-gray-600 mt-1">
-                Maximum number of recent posts to fetch per creator
-              </p>
+                      {/* Content Limit */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Max Content Per Creator
+                        </label>
+                        <select
+                          value={settings.max_content_per_creator}
+                          onChange={(e) => setSettings(prev => ({ 
+                            ...prev, 
+                            max_content_per_creator: parseInt(e.target.value) 
+                          }))}
+                          className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        >
+                          <option value={5}>5 items</option>
+                          <option value={10}>10 items</option>
+                          <option value={15}>15 items</option>
+                          <option value={20}>20 items</option>
+                          <option value={50}>50 items</option>
+                        </select>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Maximum number of recent posts to fetch per creator
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl">{activePlatform?.icon}</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">Coming Soon</h3>
+                  <p className="text-gray-600">
+                    {activePlatform?.name} integration is currently in development and will be available soon.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Refresh Settings */}
+          {/* General Settings */}
           <div className="bg-white rounded-2xl shadow-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-6">Auto-Refresh Settings</h2>
+            <h2 className="text-xl font-semibold text-gray-800 mb-6">General Settings</h2>
             
             <div className="space-y-6">
-              {/* Auto Refresh Toggle */}
+              {/* Auto Refresh */}
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-medium text-gray-800">Auto-Refresh Content</h3>
@@ -321,29 +502,89 @@ export default function SettingsPage() {
             </div>
           </div>
 
-
-          {/* Account Settings */}
+          {/* Account & Data Management */}
           <div className="bg-white rounded-2xl shadow-lg p-6">
             <h2 className="text-xl font-semibold text-gray-800 mb-6">Account & Data</h2>
             
             <div className="space-y-6">
-              {/* Data Management */}
+              {/* Cache Management */}
               <div className="border border-gray-200 rounded-lg p-4">
-                <h3 className="font-medium text-gray-800 mb-2">Data Management</h3>
+                <h3 className="font-medium text-gray-800 mb-2">Clear Cache</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  Manage your cached content and AI-generated data
+                  Remove all cached content, transcripts, and AI summaries. This will free up space and force fresh content fetching.
                 </p>
-                <div className="flex gap-3">
+                <button
+                  onClick={clearCache}
+                  className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Clear All Cache
+                </button>
+              </div>
+
+              {/* Local Data Management */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h3 className="font-medium text-gray-800 mb-2">Local Preferences</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Clear your read/saved items and local preferences stored in your browser.
+                </p>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('readItems')
+                    localStorage.removeItem('savedItems')
+                    setMessage('Local preferences cleared')
+                    setTimeout(() => setMessage(''), 3000)
+                  }}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Clear Local Data
+                </button>
+              </div>
+
+              {/* Account Deletion */}
+              <div className="border border-red-200 rounded-lg p-4 bg-red-50">
+                <h3 className="font-medium text-red-800 mb-2">Delete Account</h3>
+                <p className="text-sm text-red-700 mb-4">
+                  Permanently delete your account and all associated data. This action cannot be undone.
+                </p>
+                <button
+                  onClick={deleteAccount}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Delete Account
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Sign Out */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h3 className="font-medium text-gray-800 mb-2">Sign Out</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Sign out of your account. Your settings and data will be preserved.
+                </p>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-600">
+                    Signed in as: <span className="font-medium">{user?.email}</span>
+                  </div>
                   <button
-                    onClick={() => {
-                      localStorage.removeItem('readItems')
-                      localStorage.removeItem('savedItems')
-                      setMessage('Local preferences cleared')
-                      setTimeout(() => setMessage(''), 3000)
-                    }}
-                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                    onClick={signOut}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
                   >
-                    Clear Read/Saved Items
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    Sign Out
                   </button>
                 </div>
               </div>
@@ -354,42 +595,10 @@ export default function SettingsPage() {
                 <div className="text-sm text-gray-600 space-y-1">
                   <p>Settings are automatically synced across your devices</p>
                   <p>All data is stored securely with end-to-end encryption</p>
+                  <p>Changes are saved automatically as you make them</p>
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button
-              onClick={saveSettings}
-              disabled={saving}
-              className="px-8 py-3 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-            >
-              {saving ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Save Settings
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={resetToDefaults}
-              className="px-8 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Reset to Defaults
-            </button>
           </div>
         </div>
       </div>

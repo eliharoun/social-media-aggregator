@@ -45,7 +45,6 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
   // Auto-expand summary when it becomes available (if enabled)
   useEffect(() => {
     if (autoExpandSummary && summary && processingStatus?.hasSummary) {
-      // Add a small delay for smooth animation
       setTimeout(() => {
         setShowSummary(true)
       }, 300)
@@ -76,7 +75,7 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
       if (summaryData) {
         setSummary(summaryData)
       }
-    } catch (err) {
+    } catch {
       // Summary doesn't exist yet
     }
   }
@@ -95,13 +94,12 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
       if (transcriptData) {
         setTranscript(transcriptData)
       }
-    } catch (err) {
+    } catch {
       // Transcript doesn't exist yet
     }
   }
 
   const loadUserPreferences = () => {
-    // Load from localStorage for now (could be moved to database later)
     const readItems = JSON.parse(localStorage.getItem('readItems') || '[]')
     const savedItems = JSON.parse(localStorage.getItem('savedItems') || '[]')
     
@@ -111,27 +109,22 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
 
   const toggleRead = () => {
     const readItems = JSON.parse(localStorage.getItem('readItems') || '[]')
-    let updatedItems
-    
-    if (isRead) {
-      updatedItems = readItems.filter((id: string) => id !== content.id)
-    } else {
-      updatedItems = [...readItems, content.id]
-    }
+    const updatedItems = isRead 
+      ? readItems.filter((id: string) => id !== content.id)
+      : [...readItems, content.id]
     
     localStorage.setItem('readItems', JSON.stringify(updatedItems))
     setIsRead(!isRead)
+    
+    // Dispatch custom event to notify dashboard of read status change
+    window.dispatchEvent(new CustomEvent('readItemsChanged'))
   }
 
   const toggleSaved = () => {
     const savedItems = JSON.parse(localStorage.getItem('savedItems') || '[]')
-    let updatedItems
-    
-    if (isSaved) {
-      updatedItems = savedItems.filter((id: string) => id !== content.id)
-    } else {
-      updatedItems = [...savedItems, content.id]
-    }
+    const updatedItems = isSaved 
+      ? savedItems.filter((id: string) => id !== content.id)
+      : [...savedItems, content.id]
     
     localStorage.setItem('savedItems', JSON.stringify(updatedItems))
     setIsSaved(!isSaved)
@@ -147,11 +140,10 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
     if (navigator.share) {
       try {
         await navigator.share(shareData)
-      } catch (err) {
-        // User cancelled or error occurred
+      } catch {
+        // User cancelled
       }
     } else {
-      // Fallback: copy to clipboard
       await navigator.clipboard.writeText(`${shareData.title}\n\n${shareData.text}\n\n${shareData.url}`)
       alert('Content copied to clipboard!')
     }
@@ -160,22 +152,31 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
   const platformConfig = {
     tiktok: { 
       name: 'TikTok', 
-      icon: '🎵', 
-      color: 'bg-pink-500',
+      icon: (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-.88-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43V7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.43z"/>
+        </svg>
+      ),
       textColor: 'text-pink-600',
       bgColor: 'bg-pink-50'
     },
     youtube: { 
       name: 'YouTube', 
-      icon: '📺', 
-      color: 'bg-red-500',
+      icon: (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+        </svg>
+      ),
       textColor: 'text-red-600',
       bgColor: 'bg-red-50'
     },
     instagram: { 
       name: 'Instagram', 
-      icon: '📸', 
-      color: 'bg-purple-500',
+      icon: (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+        </svg>
+      ),
       textColor: 'text-purple-600',
       bgColor: 'bg-purple-50'
     },
@@ -202,196 +203,201 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
 
   return (
     <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow overflow-hidden">
-      <div className="flex gap-4 p-6">
-        {/* Thumbnail */}
-        {content.thumbnail_url && (
-          <div className="flex-shrink-0">
-            <div className="relative w-32 h-48 rounded-lg overflow-hidden">
-              <Image
-                src={content.thumbnail_url}
-                alt={content.title || 'Content thumbnail'}
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 128px, 128px"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Content Info */}
-        <div className="flex-1 min-w-0">
-          {/* Header */}
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg font-semibold text-gray-800">
+      {/* Responsive Layout */}
+      <div className="p-4 sm:p-6">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="text-base sm:text-lg font-semibold text-gray-800 truncate">
               @{content.creator_username}
             </span>
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.bgColor} ${config.textColor}`}>
-              {config.icon} {config.name}
+            <span className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${config.bgColor} ${config.textColor}`}>
+              {config.icon} <span className="hidden sm:inline ml-1">{config.name}</span>
             </span>
-            <span className="text-sm text-gray-500">
-              • {content.created_at ? formatDate(content.created_at) : 'Unknown date'}
-            </span>
-            
-            {/* Processing Status Indicator */}
-            {processingStatus && (
-              <div className="ml-auto">
-                <ProcessingIndicator 
-                  status={processingStatus} 
-                  size="sm"
+          </div>
+          
+          {/* Processing Status Indicator - Hide when summary is available */}
+          {processingStatus && !summary && (
+            <div className="flex-shrink-0">
+              <ProcessingIndicator 
+                status={processingStatus} 
+                size="sm"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Content Layout */}
+        <div className="flex gap-3 mb-4">
+          {/* Thumbnail */}
+          {content.thumbnail_url && (
+            <div className="flex-shrink-0">
+              <div className="relative w-20 h-28 sm:w-32 sm:h-48 rounded-lg overflow-hidden">
+                <Image
+                  src={content.thumbnail_url}
+                  alt={content.title || 'Content thumbnail'}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 640px) 80px, 128px"
                 />
+              </div>
+            </div>
+          )}
+          
+          <div className="flex-1 min-w-0">
+            {/* Title */}
+            <h3 className="text-sm sm:text-lg font-semibold text-gray-800 mb-2 line-clamp-2">
+              {content.title || 'Untitled'}
+            </h3>
+
+            {/* Date and Platform */}
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-500 mb-2">
+              <span>{content.created_at ? formatDate(content.created_at) : 'Unknown'}</span>
+              <span className="sm:hidden">•</span>
+              <span className={`sm:hidden px-1.5 py-0.5 rounded text-xs ${config.textColor} ${config.bgColor}`}>
+                {config.name}
+              </span>
+            </div>
+
+            {/* Stats */}
+            {content.stats && (
+              <div className="flex gap-3 sm:gap-6 text-xs sm:text-sm text-gray-600 mb-3">
+                <div className="flex items-center gap-1">
+                  <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>{formatNumber(content.stats.views)}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                  </svg>
+                  <span>{formatNumber(content.stats.likes)}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  <span>{formatNumber(content.stats.comments)}</span>
+                </div>
               </div>
             )}
           </div>
+        </div>
 
-          {/* Title */}
-          <h3 className="text-lg font-semibold text-gray-800 mb-2 line-clamp-2">
-            {content.title || 'Untitled'}
-          </h3>
+        {/* Caption */}
+        {content.caption && (
+          <p className="text-sm text-gray-600 mb-3 line-clamp-2 sm:line-clamp-3">
+            {content.caption}
+          </p>
+        )}
 
-          {/* Caption */}
-          {content.caption && (
-            <p className="text-gray-600 mb-3 line-clamp-3">
-              {content.caption}
-            </p>
-          )}
+        {/* Hashtags */}
+        {content.hashtags && content.hashtags.length > 0 && (
+          <div className="flex flex-wrap gap-1 sm:gap-2 mb-4">
+            {content.hashtags.slice(0, 3).map((tag, idx) => (
+              <span key={idx} className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs">
+                #{tag}
+              </span>
+            ))}
+            {content.hashtags.length > 3 && (
+              <span className="text-xs text-gray-500">
+                +{content.hashtags.length - 3}
+              </span>
+            )}
+          </div>
+        )}
 
-          {/* Hashtags */}
-          {content.hashtags && content.hashtags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-4">
-              {content.hashtags.slice(0, 5).map((tag, idx) => (
-                <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs">
-                  #{tag}
-                </span>
-              ))}
-              {content.hashtags.length > 5 && (
-                <span className="text-xs text-gray-500">
-                  +{content.hashtags.length - 5} more
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Stats */}
-          {content.stats && (
-            <div className="flex gap-6 mb-4 text-gray-600 text-sm">
-              <div className="flex items-center gap-1">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-                <span>{formatNumber(content.stats.views)}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                </svg>
-                <span>{formatNumber(content.stats.likes)}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <span>{formatNumber(content.stats.comments)}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex flex-wrap gap-2">
+        {/* Actions */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          {/* Primary Actions */}
+          <div className="flex gap-2 flex-1">
             <a
               href={content.content_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1 sm:gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
-              Original
+              <span className="hidden sm:inline">Original</span>
+              <span className="sm:hidden">View</span>
             </a>
             
-            {/* AI Summary Button */}
             {summary ? (
               <button
                 onClick={() => setShowSummary(!showSummary)}
-                className="inline-flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1 sm:gap-2 px-3 py-2 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
-                {showSummary ? 'Hide' : 'Show'} Summary
+                <span className="hidden sm:inline">{showSummary ? 'Hide' : 'Show'} Summary</span>
+                <span className="sm:hidden">Summary</span>
               </button>
             ) : (
               <button
                 disabled
-                className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm font-medium cursor-not-allowed"
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1 sm:gap-2 px-3 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm font-medium cursor-not-allowed"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
-                No Summary
+                <span>Summary</span>
               </button>
             )}
+          </div>
 
-            {/* Transcript Button */}
-            {transcript ? (
+          {/* Secondary Actions */}
+          <div className="flex gap-2 justify-center sm:justify-start">
+            {transcript && (
               <button
                 onClick={() => setShowTranscriptModal(true)}
-                className="inline-flex items-center gap-2 px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-sm font-medium transition-colors"
+                className="inline-flex items-center gap-1 px-3 py-1.5 sm:py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs sm:text-sm font-medium transition-colors"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 Transcript
               </button>
-            ) : (
-              <button
-                disabled
-                className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm font-medium cursor-not-allowed"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                No Transcript
-              </button>
             )}
-
-            {/* Mark as Read */}
+            
             <button
               onClick={toggleRead}
-              className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1 px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                 isRead 
-                  ? 'bg-green-100 text-green-700 hover:bg-green-200' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-green-50 text-green-700 hover:bg-green-100' 
+                  : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
               }`}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              {isRead ? 'Read' : 'Mark Read'}
+              <span className="hidden sm:inline">{isRead ? 'Read' : 'Mark Read'}</span>
+              <span className="sm:hidden">Read</span>
             </button>
 
-            {/* Save for Later */}
             <button
               onClick={toggleSaved}
-              className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1 px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                 isSaved 
-                  ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100' 
+                  : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
               }`}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
               </svg>
-              {isSaved ? 'Saved' : 'Save'}
+              <span className="hidden sm:inline">{isSaved ? 'Saved' : 'Save'}</span>
+              <span className="sm:hidden">Save</span>
             </button>
 
-            {/* Share */}
             <button
               onClick={shareContent}
-              className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+              className="inline-flex items-center gap-1 px-3 py-1.5 sm:py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-xs sm:text-sm font-medium transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
               </svg>
               Share
@@ -402,12 +408,12 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
 
       {/* AI Summary Section */}
       {showSummary && summary && (
-        <div className="border-t border-gray-100 p-6 bg-gradient-to-r from-purple-50 to-blue-50 animate-slideDown">
+        <div className="border-t border-gray-100 p-4 sm:p-6 bg-gradient-to-r from-purple-50 to-blue-50 animate-slideDown">
           <div className="flex items-center gap-2 mb-4">
             <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
-            <h4 className="text-lg font-semibold text-purple-800">AI Summary</h4>
+            <h4 className="text-base sm:text-lg font-semibold text-purple-800">AI Summary</h4>
             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
               summary.sentiment === 'positive' ? 'bg-green-100 text-green-700' :
               summary.sentiment === 'negative' ? 'bg-red-100 text-red-700' :
@@ -417,14 +423,12 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
             </span>
           </div>
 
-          {/* Summary Text */}
           <div className="mb-4">
-            <p className="text-gray-700 leading-relaxed">
+            <p className="text-sm sm:text-base text-gray-700 leading-relaxed">
               {summary.summary}
             </p>
           </div>
 
-          {/* Key Points */}
           {summary.key_points && summary.key_points.length > 0 && (
             <div className="mb-4">
               <h5 className="text-sm font-semibold text-gray-800 mb-2">Key Points:</h5>
@@ -439,7 +443,6 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
             </div>
           )}
 
-          {/* Topics */}
           {summary.topics && summary.topics.length > 0 && (
             <div>
               <h5 className="text-sm font-semibold text-gray-800 mb-2">Topics:</h5>

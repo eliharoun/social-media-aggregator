@@ -2,7 +2,6 @@
 
 import { useAuth } from '@/components/auth/AuthProvider'
 import { Navigation } from './Navigation'
-import { Header } from './Header'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -32,7 +31,6 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50">
-      <Header />
       <main className="pb-20 md:pb-8">
         {children}
       </main>

@@ -29,16 +29,86 @@ export default function DashboardPage() {
 
   const [filters, setFilters] = useState({
     platform: 'all',
-    sortBy: 'newest'
+    sortBy: 'newest',
+    hideRead: false
   })
 
   const [userSettings, setUserSettings] = useState<{ auto_expand_summaries: boolean } | null>(null)
+  const [readItems, setReadItems] = useState<string[]>([])
+  const [filtersExpanded, setFiltersExpanded] = useState(false)
 
   const { processPage, getStatus, resetStatus, isProcessing } = useContentProcessing()
 
-  // Load user settings for auto-expand functionality
+  // Apply filters to content
+  const getFilteredContent = (content: Content[]) => {
+    let filtered = [...content]
+
+    // Platform filter
+    if (filters.platform !== 'all') {
+      filtered = filtered.filter(item => item.platform === filters.platform)
+    }
+
+    // Hide read filter - use readItems state from localStorage
+    if (filters.hideRead) {
+      filtered = filtered.filter(item => !readItems.includes(item.id))
+    }
+
+    // Sort filter
+    switch (filters.sortBy) {
+      case 'newest':
+        filtered.sort((a, b) => {
+          const dateA = a.created_at ? new Date(a.created_at).getTime() : 0
+          const dateB = b.created_at ? new Date(b.created_at).getTime() : 0
+          return dateB - dateA
+        })
+        break
+      case 'oldest':
+        filtered.sort((a, b) => {
+          const dateA = a.created_at ? new Date(a.created_at).getTime() : 0
+          const dateB = b.created_at ? new Date(b.created_at).getTime() : 0
+          return dateA - dateB
+        })
+        break
+      case 'most_liked':
+        filtered.sort((a, b) => (b.stats?.likes || 0) - (a.stats?.likes || 0))
+        break
+      case 'most_viewed':
+        filtered.sort((a, b) => (b.stats?.views || 0) - (a.stats?.views || 0))
+        break
+    }
+
+    return filtered
+  }
+
+  // Get filtered content for display
+  const filteredDisplayedContent = getFilteredContent(feedState.displayedContent)
+  const filteredAllContent = getFilteredContent(feedState.allContent)
+
+  // Load user settings and read items
   useEffect(() => {
     loadUserSettings()
+    loadReadItems()
+
+    // Listen for localStorage changes to update readItems when user marks/unmarks items as read
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'readItems') {
+        loadReadItems()
+      }
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+    
+    // Also listen for custom events from within the same tab
+    const handleReadItemsChange = () => {
+      loadReadItems()
+    }
+    
+    window.addEventListener('readItemsChanged', handleReadItemsChange)
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('readItemsChanged', handleReadItemsChange)
+    }
   }, [])
 
   const loadUserSettings = async () => {
@@ -58,6 +128,13 @@ export default function DashboardPage() {
     } catch (err) {
       // Use default settings if not found
       setUserSettings({ auto_expand_summaries: false })
+    }
+  }
+
+  const loadReadItems = () => {
+    if (typeof window !== 'undefined') {
+      const items = JSON.parse(localStorage.getItem('readItems') || '[]')
+      setReadItems(items)
     }
   }
 
@@ -151,58 +228,44 @@ export default function DashboardPage() {
   return (
     <Layout>
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-4">Your Feed</h1>
-          <p className="text-gray-600">AI-powered summaries from your favorite creators across all platforms</p>
+        {/* Subtle Refresh Button */}
+        <div className="flex justify-center mb-6">
+          <button
+            onClick={refreshEntireFeed}
+            disabled={feedState.isRefreshing}
+            className="px-4 py-2 bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 text-gray-700 rounded-full text-sm font-medium transition-all flex items-center gap-2 shadow-sm"
+          >
+            {feedState.isRefreshing ? (
+              <>
+                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                <span>Refreshing...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>Refresh</span>
+              </>
+            )}
+          </button>
         </div>
 
-        {/* Unified Refresh Button */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-800">Content Feed</h2>
-            <button
-              onClick={refreshEntireFeed}
-              disabled={feedState.isRefreshing}
-              className="px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-lg font-semibold hover:from-pink-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-            >
-              {feedState.isRefreshing ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Refreshing Feed...
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Refresh Feed
-                </>
-              )}
-            </button>
+        {/* Processing Status */}
+        {(feedState.isRefreshing || isProcessing) && (
+          <div className="mb-6">
+            {feedState.isRefreshing && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-700 text-sm text-center">
+                🔄 Fetching latest content and preparing AI summaries...
+              </div>
+            )}
+            {isProcessing && !feedState.isRefreshing && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-purple-700 text-sm text-center">
+                🤖 Processing AI summaries for current page...
+              </div>
+            )}
           </div>
-
-          {feedState.isRefreshing && (
-            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 text-blue-700 text-sm mb-4">
-              🔄 Fetching latest content from all creators and preparing AI summaries...
-            </div>
-          )}
-
-          {isProcessing && (
-            <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-3 text-purple-700 text-sm mb-4">
-              🤖 Processing transcripts and generating AI summaries for current page...
-            </div>
-          )}
-
-          <div className="text-sm text-gray-600">
-            <p className="mb-2">
-              <strong>Total Content:</strong> {feedState.allContent.length} items across all creators
-            </p>
-            <p>
-              Click &quot;Refresh Feed&quot; to fetch the latest content and automatically generate AI summaries. 
-              Scroll up to load more pages with automatic processing.
-            </p>
-          </div>
-        </div>
+        )}
 
         {feedState.isRefreshing ? (
           <div className="space-y-6">
@@ -248,52 +311,113 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Filter and Sort Controls */}
-            <div className="bg-white rounded-xl shadow-md p-4">
-              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                  {/* Platform Filter */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700">Platform:</label>
-                    <select
-                      value={filters.platform}
-                      onChange={(e) => setFilters(prev => ({ ...prev, platform: e.target.value }))}
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            {/* Collapsible Filter Controls */}
+            <div className="bg-white rounded-xl shadow-md overflow-hidden">
+              {/* Filter Header - Always Visible */}
+              <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setFiltersExpanded(!filtersExpanded)}
+                    className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
+                  >
+                    <svg 
+                      className={`w-4 h-4 transition-transform ${filtersExpanded ? 'rotate-90' : ''}`} 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
                     >
-                      <option value="all">All Platforms</option>
-                      <option value="tiktok">🎵 TikTok</option>
-                      <option value="youtube">📺 YouTube</option>
-                      <option value="instagram">📸 Instagram</option>
-                    </select>
-                  </div>
-
-                  {/* Sort Options */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700">Sort:</label>
-                    <select
-                      value={filters.sortBy}
-                      onChange={(e) => setFilters(prev => ({ ...prev, sortBy: e.target.value }))}
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    >
-                      <option value="newest">Newest First</option>
-                      <option value="oldest">Oldest First</option>
-                      <option value="most_liked">Most Liked</option>
-                      <option value="most_viewed">Most Viewed</option>
-                    </select>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span className="text-sm font-medium">Filters</span>
+                  </button>
+                  
+                  {/* Quick Status Display */}
+                  <div className="text-xs text-gray-500">
+                    {filteredDisplayedContent.length} of {filteredAllContent.length}
+                    {(filters.platform !== 'all' || filters.hideRead) && (
+                      <span className="text-purple-600 ml-1">(filtered)</span>
+                    )}
                   </div>
                 </div>
 
+                {/* Active Filter Indicators */}
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">
-                    Showing {feedState.displayedContent.length} of {feedState.allContent.length}
-                  </span>
+                  {filters.platform !== 'all' && (
+                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                      {filters.platform}
+                    </span>
+                  )}
+                  {filters.sortBy !== 'newest' && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                      {filters.sortBy === 'most_liked' ? 'Most Liked' : 
+                       filters.sortBy === 'most_viewed' ? 'Most Viewed' : 
+                       filters.sortBy === 'oldest' ? 'Oldest' : filters.sortBy}
+                    </span>
+                  )}
+                  {filters.hideRead && (
+                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                      Hide Read
+                    </span>
+                  )}
                   {hasMore && (
-                    <span className="text-xs text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
-                      Scroll up for more
+                    <span className="bg-purple-50 text-purple-600 px-2 py-1 rounded-full text-xs">
+                      Scroll ↑
                     </span>
                   )}
                 </div>
               </div>
+
+              {/* Expandable Filter Controls */}
+              {filtersExpanded && (
+                <div className="p-3 sm:p-4 animate-slideDown">
+                  <div className="flex flex-wrap gap-2 sm:gap-3">
+                    {/* Platform Filter */}
+                    <select
+                      value={filters.platform}
+                      onChange={(e) => setFilters(prev => ({ ...prev, platform: e.target.value }))}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                    >
+                      <option value="all">All Platforms</option>
+                      <option value="tiktok">TikTok</option>
+                      <option value="youtube">YouTube</option>
+                      <option value="instagram">Instagram</option>
+                    </select>
+
+                    {/* Sort Options */}
+                    <select
+                      value={filters.sortBy}
+                      onChange={(e) => setFilters(prev => ({ ...prev, sortBy: e.target.value }))}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                    >
+                      <option value="newest">Newest</option>
+                      <option value="oldest">Oldest</option>
+                      <option value="most_liked">Most Liked</option>
+                      <option value="most_viewed">Most Viewed</option>
+                    </select>
+
+                    {/* Hide Read Toggle */}
+                    <label className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm cursor-pointer hover:bg-gray-50 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={filters.hideRead}
+                        onChange={(e) => setFilters(prev => ({ ...prev, hideRead: e.target.checked }))}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                      />
+                      <span className="text-gray-700">Hide Read</span>
+                    </label>
+
+                    {/* Clear Filters Button */}
+                    {(filters.platform !== 'all' || filters.sortBy !== 'newest' || filters.hideRead) && (
+                      <button
+                        onClick={() => setFilters({ platform: 'all', sortBy: 'newest', hideRead: false })}
+                        className="px-3 py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Infinite Scroll Container */}
@@ -305,7 +429,7 @@ export default function DashboardPage() {
               enablePullToRefresh={true}
             >
               <div className="grid gap-6">
-                {feedState.displayedContent.map((item) => (
+                {filteredDisplayedContent.map((item) => (
                   <ContentCard 
                     key={`content-${item.id}`}
                     content={item} 

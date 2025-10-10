@@ -52,6 +52,7 @@ export interface Content {
     shares: number
   }
   cached_at: string
+  is_read?: boolean
 }
 
 export interface Transcript {

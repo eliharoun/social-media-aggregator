@@ -10,6 +10,7 @@ export function CreatorsList() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showAddForm, setShowAddForm] = useState(false)
 
   // Fetch creators on component mount
   useEffect(() => {
@@ -153,7 +154,42 @@ export function CreatorsList() {
 
   return (
     <div className="space-y-6">
-      <AddCreatorForm onAdd={handleAddCreator} loading={actionLoading} />
+      {/* Collapsible Add Creator Form */}
+      <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+        <button
+          onClick={() => setShowAddForm(!showAddForm)}
+          className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">Add New Creator</h2>
+              <p className="text-sm text-gray-600">Add creators from TikTok, YouTube, or Instagram</p>
+            </div>
+          </div>
+          
+          <svg 
+            className={`w-5 h-5 text-gray-400 transition-transform ${showAddForm ? 'rotate-180' : ''}`} 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        
+        {showAddForm && (
+          <div className="border-t border-gray-200 animate-slideDown">
+            <div className="p-6">
+              <AddCreatorForm onAdd={handleAddCreator} loading={actionLoading} />
+            </div>
+          </div>
+        )}
+      </div>
 
       {error && (
         <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 text-red-700">
@@ -170,7 +206,7 @@ export function CreatorsList() {
           </div>
           <h3 className="text-lg font-semibold text-gray-800 mb-2">No Creators Added Yet</h3>
           <p className="text-gray-600">
-            Use the form above to add your first creator from TikTok, YouTube, or Instagram.
+            Click &quot;Add New Creator&quot; above to add your first creator from TikTok, YouTube, or Instagram.
           </p>
         </div>
       ) : (
