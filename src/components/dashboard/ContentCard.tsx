@@ -1,13 +1,49 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
-import { Content } from '@/lib/supabase'
+import { Content, supabase } from '@/lib/supabase'
+
+interface Summary {
+  id: string
+  summary: string
+  key_points: string[]
+  sentiment: string
+  topics: string[]
+}
 
 interface ContentCardProps {
   content: Content
 }
 
 export function ContentCard({ content }: ContentCardProps) {
+  const [summary, setSummary] = useState<Summary | null>(null)
+  const [showSummary, setShowSummary] = useState(false)
+  const [loadingSummary, setLoadingSummary] = useState(false)
+
+  useEffect(() => {
+    fetchSummary()
+  }, [content.id])
+
+  const fetchSummary = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const { data: summaryData } = await supabase
+        .from('summaries')
+        .select('*')
+        .eq('content_id', content.id)
+        .single()
+
+      if (summaryData) {
+        setSummary(summaryData)
+      }
+    } catch (err) {
+      // Summary doesn't exist yet
+    }
+  }
+
   const platformConfig = {
     tiktok: { 
       name: 'TikTok', 
@@ -151,19 +187,86 @@ export function ContentCard({ content }: ContentCardProps) {
               View Original
             </a>
             
-            {/* Placeholder for transcript/summary buttons - will be implemented in Phase 4 */}
-            <button
-              disabled
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm font-medium cursor-not-allowed"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Summary (Phase 4)
-            </button>
+            {/* AI Summary Button */}
+            {summary ? (
+              <button
+                onClick={() => setShowSummary(!showSummary)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                {showSummary ? 'Hide' : 'Show'} AI Summary
+              </button>
+            ) : (
+              <button
+                disabled
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm font-medium cursor-not-allowed"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                No Summary Yet
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* AI Summary Section */}
+      {showSummary && summary && (
+        <div className="border-t border-gray-100 p-6 bg-gradient-to-r from-purple-50 to-blue-50">
+          <div className="flex items-center gap-2 mb-4">
+            <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            <h4 className="text-lg font-semibold text-purple-800">AI Summary</h4>
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+              summary.sentiment === 'positive' ? 'bg-green-100 text-green-700' :
+              summary.sentiment === 'negative' ? 'bg-red-100 text-red-700' :
+              'bg-gray-100 text-gray-700'
+            }`}>
+              {summary.sentiment}
+            </span>
+          </div>
+
+          {/* Summary Text */}
+          <div className="mb-4">
+            <p className="text-gray-700 leading-relaxed">
+              {summary.summary}
+            </p>
+          </div>
+
+          {/* Key Points */}
+          {summary.key_points && summary.key_points.length > 0 && (
+            <div className="mb-4">
+              <h5 className="text-sm font-semibold text-gray-800 mb-2">Key Points:</h5>
+              <ul className="space-y-1">
+                {summary.key_points.map((point, idx) => (
+                  <li key={idx} className="flex items-start gap-2 text-sm text-gray-700">
+                    <span className="text-purple-500 mt-1">•</span>
+                    <span>{point}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Topics */}
+          {summary.topics && summary.topics.length > 0 && (
+            <div>
+              <h5 className="text-sm font-semibold text-gray-800 mb-2">Topics:</h5>
+              <div className="flex flex-wrap gap-2">
+                {summary.topics.map((topic, idx) => (
+                  <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                    {topic}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

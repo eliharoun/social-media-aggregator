@@ -135,9 +135,53 @@ CREATE POLICY "Users can view transcripts of accessible content" ON public.trans
     )
   );
 
+CREATE POLICY "Users can insert transcripts for accessible content" ON public.transcripts
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.content c
+      JOIN public.favorite_creators fc ON fc.platform = c.platform AND fc.username = c.creator_username
+      WHERE c.id = transcripts.content_id
+      AND fc.user_id = auth.uid()
+      AND fc.is_active = true
+    )
+  );
+
+CREATE POLICY "Users can update transcripts for accessible content" ON public.transcripts
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM public.content c
+      JOIN public.favorite_creators fc ON fc.platform = c.platform AND fc.username = c.creator_username
+      WHERE c.id = transcripts.content_id
+      AND fc.user_id = auth.uid()
+      AND fc.is_active = true
+    )
+  );
+
 -- Summaries policies
 CREATE POLICY "Users can view summaries of accessible content" ON public.summaries
   FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM public.content c
+      JOIN public.favorite_creators fc ON fc.platform = c.platform AND fc.username = c.creator_username
+      WHERE c.id = summaries.content_id
+      AND fc.user_id = auth.uid()
+      AND fc.is_active = true
+    )
+  );
+
+CREATE POLICY "Users can insert summaries for accessible content" ON public.summaries
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.content c
+      JOIN public.favorite_creators fc ON fc.platform = c.platform AND fc.username = c.creator_username
+      WHERE c.id = summaries.content_id
+      AND fc.user_id = auth.uid()
+      AND fc.is_active = true
+    )
+  );
+
+CREATE POLICY "Users can update summaries for accessible content" ON public.summaries
+  FOR UPDATE USING (
     EXISTS (
       SELECT 1 FROM public.content c
       JOIN public.favorite_creators fc ON fc.platform = c.platform AND fc.username = c.creator_username

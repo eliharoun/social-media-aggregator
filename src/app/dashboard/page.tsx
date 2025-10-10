@@ -5,24 +5,31 @@ import Link from 'next/link'
 import { Layout } from '@/components/layout/Layout'
 import { ContentManager } from '@/components/dashboard/ContentManager'
 import { ContentCard } from '@/components/dashboard/ContentCard'
+import { AIProcessor } from '@/components/dashboard/AIProcessor'
 import { Content, supabase } from '@/lib/supabase'
 
 export default function DashboardPage() {
   const [content, setContent] = useState<Content[]>([])
   const [loading, setLoading] = useState(true)
+  const [pagination, setPagination] = useState({
+    limit: 10,
+    offset: 0,
+    total: 0,
+    hasMore: false
+  })
 
   useEffect(() => {
     fetchContent()
   }, [])
 
-  const fetchContent = async () => {
+  const fetchContent = async (offset = 0) => {
     try {
       setLoading(true)
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
       console.log('Fetching content list...')
-      const response = await fetch('/api/content/list', {
+      const response = await fetch(`/api/content/list?limit=10&offset=${offset}`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
@@ -35,6 +42,12 @@ export default function DashboardPage() {
         console.log('Content list data:', data)
         console.log('Content array length:', data.content?.length || 0)
         setContent(data.content || [])
+        setPagination({
+          limit: data.pagination?.limit || 10,
+          offset: data.pagination?.offset || 0,
+          total: data.total || 0,
+          hasMore: data.hasMore || false
+        })
       } else {
         console.error('Content list error:', await response.text())
       }
@@ -43,6 +56,10 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handlePageChange = (newOffset: number) => {
+    fetchContent(newOffset)
   }
 
   const handleContentUpdate = (newContent: Content[]) => {
@@ -58,6 +75,13 @@ export default function DashboardPage() {
         </div>
 
         <ContentManager onContentUpdate={handleContentUpdate} />
+        
+        {content.length > 0 && (
+          <AIProcessor 
+            content={content} 
+            onProcessingComplete={() => fetchContent(pagination.offset)} 
+          />
+        )}
 
         {loading ? (
           <div className="space-y-6">
@@ -100,10 +124,10 @@ export default function DashboardPage() {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold text-gray-800">
-                Latest Content ({content.length})
+                Latest Content ({pagination.total} total, showing {content.length})
               </h2>
               <button
-                onClick={fetchContent}
+                onClick={() => fetchContent(pagination.offset)}
                 className="text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -118,6 +142,31 @@ export default function DashboardPage() {
                 <ContentCard key={item.id} content={item} />
               ))}
             </div>
+
+            {/* Pagination Controls */}
+            {pagination.total > 10 && (
+              <div className="flex items-center justify-center gap-4 mt-8">
+                <button
+                  onClick={() => handlePageChange(Math.max(0, pagination.offset - 10))}
+                  disabled={pagination.offset === 0}
+                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                
+                <span className="text-sm text-gray-600">
+                  Page {Math.floor(pagination.offset / 10) + 1} of {Math.ceil(pagination.total / 10)}
+                </span>
+                
+                <button
+                  onClick={() => handlePageChange(pagination.offset + 10)}
+                  disabled={!pagination.hasMore}
+                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
