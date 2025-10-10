@@ -183,7 +183,8 @@ export default function DashboardPage() {
           }
         }
       } else {
-        console.error('Failed to fetch content:', await response.text())
+        const errorText = await response.text()
+        console.error('Failed to fetch content:', response.status, errorText)
         setFeedState(prev => ({ ...prev, isRefreshing: false }))
       }
     } catch (err) {

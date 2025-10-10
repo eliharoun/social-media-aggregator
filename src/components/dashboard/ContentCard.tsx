@@ -66,17 +66,24 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      const { data: summaryData } = await supabase
+      const { data: summaryData, error } = await supabase
         .from('summaries')
         .select('*')
         .eq('content_id', content.id)
-        .single()
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) {
+        console.log('Summary fetch error:', error)
+        return
+      }
 
       if (summaryData) {
         setSummary(summaryData)
       }
-    } catch {
-      // Summary doesn't exist yet
+    } catch (err) {
+      console.log('Summary fetch exception:', err)
     }
   }
 
@@ -85,17 +92,24 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      const { data: transcriptData } = await supabase
+      const { data: transcriptData, error } = await supabase
         .from('transcripts')
         .select('*')
         .eq('content_id', content.id)
-        .single()
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) {
+        console.log('Transcript fetch error:', error)
+        return
+      }
 
       if (transcriptData) {
         setTranscript(transcriptData)
       }
-    } catch {
-      // Transcript doesn't exist yet
+    } catch (err) {
+      console.log('Transcript fetch exception:', err)
     }
   }
 
