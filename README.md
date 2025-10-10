@@ -260,7 +260,6 @@ The architecture supports easy platform addition:
 - ⚡ **Initial Load**: < 2 seconds
 - 🔄 **Feed Refresh**: < 1 second (cached)
 - 🤖 **AI Processing**: < 10 seconds per batch
-- 📱 **Mobile Score**: 95+ (Lighthouse)
 
 ### Optimizations
 - Client-side batch processing
