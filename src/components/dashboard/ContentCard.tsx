@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { Content, supabase } from '@/lib/supabase'
+import { Modal } from '@/components/ui/Modal'
 
 interface Summary {
   id: string
@@ -12,17 +13,29 @@ interface Summary {
   topics: string[]
 }
 
+interface Transcript {
+  id: string
+  transcript_text: string
+  webvtt_data?: string
+  language: string
+}
+
 interface ContentCardProps {
   content: Content
 }
 
 export function ContentCard({ content }: ContentCardProps) {
   const [summary, setSummary] = useState<Summary | null>(null)
+  const [transcript, setTranscript] = useState<Transcript | null>(null)
   const [showSummary, setShowSummary] = useState(false)
-  const [loadingSummary, setLoadingSummary] = useState(false)
+  const [showTranscriptModal, setShowTranscriptModal] = useState(false)
+  const [isRead, setIsRead] = useState(false)
+  const [isSaved, setIsSaved] = useState(false)
 
   useEffect(() => {
     fetchSummary()
+    fetchTranscript()
+    loadUserPreferences()
   }, [content.id])
 
   const fetchSummary = async () => {
@@ -41,6 +54,82 @@ export function ContentCard({ content }: ContentCardProps) {
       }
     } catch (err) {
       // Summary doesn't exist yet
+    }
+  }
+
+  const fetchTranscript = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const { data: transcriptData } = await supabase
+        .from('transcripts')
+        .select('*')
+        .eq('content_id', content.id)
+        .single()
+
+      if (transcriptData) {
+        setTranscript(transcriptData)
+      }
+    } catch (err) {
+      // Transcript doesn't exist yet
+    }
+  }
+
+  const loadUserPreferences = () => {
+    // Load from localStorage for now (could be moved to database later)
+    const readItems = JSON.parse(localStorage.getItem('readItems') || '[]')
+    const savedItems = JSON.parse(localStorage.getItem('savedItems') || '[]')
+    
+    setIsRead(readItems.includes(content.id))
+    setIsSaved(savedItems.includes(content.id))
+  }
+
+  const toggleRead = () => {
+    const readItems = JSON.parse(localStorage.getItem('readItems') || '[]')
+    let updatedItems
+    
+    if (isRead) {
+      updatedItems = readItems.filter((id: string) => id !== content.id)
+    } else {
+      updatedItems = [...readItems, content.id]
+    }
+    
+    localStorage.setItem('readItems', JSON.stringify(updatedItems))
+    setIsRead(!isRead)
+  }
+
+  const toggleSaved = () => {
+    const savedItems = JSON.parse(localStorage.getItem('savedItems') || '[]')
+    let updatedItems
+    
+    if (isSaved) {
+      updatedItems = savedItems.filter((id: string) => id !== content.id)
+    } else {
+      updatedItems = [...savedItems, content.id]
+    }
+    
+    localStorage.setItem('savedItems', JSON.stringify(updatedItems))
+    setIsSaved(!isSaved)
+  }
+
+  const shareContent = async () => {
+    const shareData = {
+      title: `${content.title || 'Content'} by @${content.creator_username}`,
+      text: summary?.summary || content.caption || 'Check out this content!',
+      url: content.content_url
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData)
+      } catch (err) {
+        // User cancelled or error occurred
+      }
+    } else {
+      // Fallback: copy to clipboard
+      await navigator.clipboard.writeText(`${shareData.title}\n\n${shareData.text}\n\n${shareData.url}`)
+      alert('Content copied to clipboard!')
     }
   }
 
@@ -174,41 +263,105 @@ export function ContentCard({ content }: ContentCardProps) {
           )}
 
           {/* Actions */}
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2">
             <a
               href={content.content_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+              className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
-              View Original
+              Original
             </a>
             
             {/* AI Summary Button */}
             {summary ? (
               <button
                 onClick={() => setShowSummary(!showSummary)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
+                className="inline-flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
-                {showSummary ? 'Hide' : 'Show'} AI Summary
+                {showSummary ? 'Hide' : 'Show'} Summary
               </button>
             ) : (
               <button
                 disabled
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm font-medium cursor-not-allowed"
+                className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm font-medium cursor-not-allowed"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
-                No Summary Yet
+                No Summary
               </button>
             )}
+
+            {/* Transcript Button */}
+            {transcript ? (
+              <button
+                onClick={() => setShowTranscriptModal(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Transcript
+              </button>
+            ) : (
+              <button
+                disabled
+                className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm font-medium cursor-not-allowed"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                No Transcript
+              </button>
+            )}
+
+            {/* Mark as Read */}
+            <button
+              onClick={toggleRead}
+              className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                isRead 
+                  ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              {isRead ? 'Read' : 'Mark Read'}
+            </button>
+
+            {/* Save for Later */}
+            <button
+              onClick={toggleSaved}
+              className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                isSaved 
+                  ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+              </svg>
+              {isSaved ? 'Saved' : 'Save'}
+            </button>
+
+            {/* Share */}
+            <button
+              onClick={shareContent}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+              </svg>
+              Share
+            </button>
           </div>
         </div>
       </div>
@@ -267,6 +420,74 @@ export function ContentCard({ content }: ContentCardProps) {
           )}
         </div>
       )}
+
+      {/* Transcript Modal */}
+      <Modal
+        isOpen={showTranscriptModal}
+        onClose={() => setShowTranscriptModal(false)}
+        title={`Transcript - @${content.creator_username}`}
+      >
+        {transcript ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm text-gray-600 mb-4">
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.bgColor} ${config.textColor}`}>
+                {config.icon} {config.name}
+              </span>
+              <span>•</span>
+              <span>Language: {transcript.language.toUpperCase()}</span>
+              <span>•</span>
+              <span>{content.created_at ? formatDate(content.created_at) : 'Unknown date'}</span>
+            </div>
+            
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h4 className="font-semibold text-gray-800 mb-2">{content.title || 'Untitled'}</h4>
+              {content.caption && (
+                <p className="text-gray-600 text-sm mb-3">{content.caption}</p>
+              )}
+            </div>
+
+            <div className="prose prose-sm max-w-none">
+              <h5 className="text-sm font-semibold text-gray-800 mb-3">Full Transcript:</h5>
+              <div className="bg-white border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
+                <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                  {transcript.transcript_text}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t border-gray-200">
+              <button
+                onClick={shareContent}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                </svg>
+                Share Transcript
+              </button>
+              
+              <a
+                href={content.content_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                View Original
+              </a>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p className="text-gray-600">No transcript available for this content.</p>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
