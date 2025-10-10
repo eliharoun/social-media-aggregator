@@ -22,9 +22,16 @@ export function Layout({ children }: LayoutProps) {
   }
 
   if (!user) {
+    // Redirect to home page if not authenticated
+    if (typeof window !== 'undefined') {
+      window.location.href = '/'
+    }
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center p-4">
-        {children}
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-pink-200 border-t-pink-500 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Redirecting...</p>
+        </div>
       </div>
     )
   }
