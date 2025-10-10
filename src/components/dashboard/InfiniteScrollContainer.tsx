@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 
 interface InfiniteScrollContainerProps {
@@ -28,7 +28,7 @@ export function InfiniteScrollContainer({
   const touchStartY = useRef(0)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const { isNearTop, scrollToTop, resetScroll } = useInfiniteScroll({
+  const { isNearBottom, scrollToTop } = useInfiniteScroll({
     threshold: 200,
     onLoadMore,
     isLoading,
@@ -133,24 +133,17 @@ export function InfiniteScrollContainer({
       {/* Pull-to-refresh indicator */}
       {pullToRefreshIndicator}
       
-      {/* Scroll up indicator */}
-      {isNearTop && hasMore && !isLoading && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-40 bg-purple-500 text-white px-4 py-2 rounded-full shadow-lg text-sm font-medium animate-bounce">
-          ↑ Scroll up to load more
-        </div>
-      )}
-      
-      {/* Show loading indicator at top when loading more */}
-      {isLoading && hasMore && (
-        <div className="mb-6 animate-fadeIn">
-          {loadingComponent || defaultLoadingComponent}
-        </div>
-      )}
-      
       {/* Main content */}
       <div className="transition-all duration-300">
         {children}
       </div>
+      
+      {/* Show loading indicator at bottom when loading more */}
+      {isLoading && hasMore && (
+        <div className="mt-6 animate-fadeIn">
+          {loadingComponent || defaultLoadingComponent}
+        </div>
+      )}
       
       {/* End of content indicator */}
       {!hasMore && (
@@ -168,7 +161,7 @@ export function InfiniteScrollContainer({
       )}
       
       {/* Scroll to top button */}
-      {!isNearTop && (
+      {window.scrollY > 200 && (
         <button
           onClick={scrollToTop}
           className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full shadow-lg transition-all duration-300 flex items-center justify-center"

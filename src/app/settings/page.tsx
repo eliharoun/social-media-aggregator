@@ -37,6 +37,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('tiktok')
   const [message, setMessage] = useState('')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [isGeneratingSummaries, setIsGeneratingSummaries] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -174,6 +175,44 @@ export default function SettingsPage() {
     }
   }
 
+  const generateMissingSummaries = async () => {
+    setIsGeneratingSummaries(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch('/api/content/ensure-summaries', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.processed > 0) {
+          setMessage(`Generated ${result.processed} summaries! Refreshing page to show them...`)
+          // Auto-refresh the page after 2 seconds to show new summaries
+          setTimeout(() => {
+            window.location.reload()
+          }, 2000)
+        } else {
+          setMessage('All transcripts already have summaries!')
+          setTimeout(() => setMessage(''), 3000)
+        }
+      } else {
+        setMessage('Failed to generate summaries')
+        setTimeout(() => setMessage(''), 3000)
+      }
+    } catch (err) {
+      setMessage('Failed to generate summaries')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setIsGeneratingSummaries(false)
+    }
+  }
+
   const platforms = [
     { 
       key: 'tiktok', 
@@ -236,7 +275,7 @@ export default function SettingsPage() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         {message && (
           <div className={`mb-6 p-4 rounded-lg ${
-            message.includes('success') || message.includes('cleared')
+            message.includes('success') || message.includes('cleared') || message.includes('Generated')
               ? 'bg-green-50 border border-green-200 text-green-700'
               : 'bg-red-50 border border-red-200 text-red-700'
           }`}>
@@ -476,6 +515,33 @@ export default function SettingsPage() {
             <h2 className="text-xl font-semibold text-gray-800 mb-6">Data Management</h2>
             
             <div className="space-y-6">
+              {/* Generate Missing Summaries */}
+              <div className="border border-purple-200 rounded-lg p-4 bg-purple-50">
+                <h3 className="font-medium text-purple-800 mb-2">Generate Missing Summaries</h3>
+                <p className="text-sm text-purple-700 mb-4">
+                  Some content may have transcripts but no AI summaries. Click here to generate summaries for all transcripts that are missing them.
+                </p>
+                <button
+                  onClick={generateMissingSummaries}
+                  disabled={isGeneratingSummaries}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isGeneratingSummaries ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      Generate Summaries
+                    </>
+                  )}
+                </button>
+              </div>
+
               {/* Cache Management */}
               <div className="border border-gray-200 rounded-lg p-4">
                 <h3 className="font-medium text-gray-800 mb-2">Clear Cache</h3>

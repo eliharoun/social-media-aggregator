@@ -92,15 +92,14 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
+      // Simplified query - just get any transcript for this content
       const { data: transcriptData, error } = await supabase
         .from('transcripts')
         .select('*')
         .eq('content_id', content.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
         .maybeSingle()
 
-      if (error) {
+      if (error && error.code !== 'PGRST116') {
         console.log('Transcript fetch error:', error)
         return
       }
@@ -109,7 +108,7 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
         setTranscript(transcriptData)
       }
     } catch (err) {
-      console.log('Transcript fetch exception:', err)
+      // Silently fail to avoid resource errors
     }
   }
 

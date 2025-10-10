@@ -18,7 +18,7 @@ export function useInfiniteScroll({
   debounceMs = 100
 }: UseInfiniteScrollOptions) {
   
-  const [isNearTop, setIsNearTop] = useState(false)
+  const [isNearBottom, setIsNearBottom] = useState(false)
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
   const lastScrollY = useRef(0)
   const hasTriggeredLoad = useRef(false)
@@ -37,20 +37,22 @@ export function useInfiniteScroll({
     
     // Debounce scroll handling for better performance
     debounceRef.current = setTimeout(() => {
-      const nearTop = currentScrollY < threshold
-      setIsNearTop(nearTop)
+      // Standard infinite scroll: load more when scrolling down and near bottom
+      const windowHeight = window.innerHeight
+      const documentHeight = document.documentElement.scrollHeight
+      const nearBottom = currentScrollY + windowHeight >= documentHeight - threshold
       
-      // Only trigger load more when scrolling up and near top
-      if (nearTop && scrollDirection === 'up' && !hasTriggeredLoad.current) {
+      setIsNearBottom(nearBottom)
+      
+      // Trigger load more when scrolling down and near bottom
+      if (nearBottom && scrollDirection === 'down' && !hasTriggeredLoad.current) {
         hasTriggeredLoad.current = true
         onLoadMore()
         
         // Reset trigger after a delay to prevent multiple rapid calls
-        const timeoutId = setTimeout(() => {
+        setTimeout(() => {
           hasTriggeredLoad.current = false
         }, 1000)
-        
-        return () => clearTimeout(timeoutId)
       }
     }, debounceMs)
   }, [threshold, onLoadMore, isLoading, hasMore, debounceMs])
@@ -82,7 +84,7 @@ export function useInfiniteScroll({
   }, [])
 
   return {
-    isNearTop,
+    isNearBottom,
     scrollToTop,
     resetScroll,
     scrollToPosition

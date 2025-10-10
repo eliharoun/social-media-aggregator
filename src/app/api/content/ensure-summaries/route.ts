@@ -11,13 +11,13 @@ function createLLMInstance() {
   if (DEFAULT_LLM_PROVIDER === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
     return new ChatAnthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
-      model: 'claude-3-haiku-20240307', // Cost-optimized model
+      model: 'claude-3-haiku-20240307',
       temperature: 0.3,
     })
   } else {
     return new ChatOpenAI({
       apiKey: process.env.OPENAI_API_KEY,
-      model: 'gpt-4o-mini', // Cost-optimized model
+      model: 'gpt-4o-mini',
       temperature: 0.3,
     })
   }
@@ -54,7 +54,6 @@ Analyze the transcript and provide a comprehensive yet concise summary that capt
    - Important dates, numbers, or statistics
    - Calls-to-action or next steps suggested
 
-
 4. **Topics/Categories**: List 2-4 main topics or themes that best categorize this content
 
 ## Output Format
@@ -77,8 +76,6 @@ If any section has no relevant information, use an empty array [] or null.
 `)
 
 export async function POST(request: NextRequest) {
-  const startTime = Date.now()
-  
   try {
     const authorization = request.headers.get('authorization')
     const token = authorization?.replace('Bearer ', '')
@@ -106,57 +103,71 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { transcriptIds } = await request.json()
-    if (!transcriptIds || !Array.isArray(transcriptIds)) {
-      return NextResponse.json({ error: 'Transcript IDs required' }, { status: 400 })
-    }
-
-    const { data: transcripts } = await supabase
+    // Find unique content that has transcripts but no summaries
+    // Get all transcripts without summaries, ordered by content_id and created_at
+    const { data: transcriptsWithoutSummaries } = await supabase
       .from('transcripts')
-      .select('*, content(*)')
-      .in('id', transcriptIds)
+      .select(`
+        id,
+        content_id,
+        transcript_text,
+        created_at,
+        content (
+          id,
+          creator_username,
+          platform,
+          title,
+          caption
+        )
+      `)
+      .not('content_id', 'in', `(
+        SELECT content_id FROM summaries
+      )`)
+      .order('content_id')
+      .order('created_at', { ascending: false })
 
-    if (!transcripts) {
-      return NextResponse.json({ error: 'No transcripts found' }, { status: 404 })
+    if (!transcriptsWithoutSummaries || transcriptsWithoutSummaries.length === 0) {
+      return NextResponse.json({ 
+        message: 'All transcripts already have summaries',
+        processed: 0 
+      })
     }
+
+    // Remove duplicates by content_id (keep only the most recent transcript per content)
+    const uniqueTranscripts = transcriptsWithoutSummaries.reduce((acc, transcript) => {
+      const existing = acc.find(t => t.content_id === transcript.content_id)
+      if (!existing) {
+        acc.push(transcript)
+      }
+      return acc
+    }, [] as typeof transcriptsWithoutSummaries)
+
+    // Process only 10 transcripts at a time to avoid timeout
+    const transcriptsToProcess = uniqueTranscripts.slice(0, 10)
 
     const llm = createLLMInstance()
-    const processed: Array<{ content_id: string; summary_generated?: boolean; already_exists?: boolean }> = []
-    const errors: Array<{ content_id: string; error: string }> = []
+    const results = []
 
-    // Process transcripts sequentially to avoid timeout issues
-    for (const transcript of transcripts) {
-      if (Date.now() - startTime > 8000) {
-        break
-      }
-
+    // Process each unique transcript that needs a summary
+    for (const transcript of transcriptsToProcess) {
       try {
-        const { data: existingSummary } = await supabase
-          .from('summaries')
-          .select('id')
-          .eq('content_id', transcript.content.id)
-          .single()
-
-        if (existingSummary) {
-          processed.push({ content_id: transcript.content.id, already_exists: true })
-          continue
-        }
-
+        const content = Array.isArray(transcript.content) 
+          ? transcript.content[0] 
+          : transcript.content
         const prompt = await SUMMARIZATION_PROMPT.format({
-          creator: transcript.content.creator_username,
-          platform: transcript.content.platform,
-          title: transcript.content.title || 'Untitled',
-          caption: transcript.content.caption || '',
+          creator: content.creator_username,
+          platform: content.platform,
+          title: content.title || 'Untitled',
+          caption: content.caption || '',
           transcript: transcript.transcript_text
         })
 
         const response = await llm.invoke(prompt)
         
         let summaryData
-
         try {
           summaryData = JSON.parse(response.content as string)
-        } catch (parseError) {
+        } catch {
           summaryData = {
             summary: (response.content as string).substring(0, 500),
             key_points: [],
@@ -168,38 +179,49 @@ export async function POST(request: NextRequest) {
         const { error: insertError } = await supabase
           .from('summaries')
           .insert({
-            content_id: transcript.content.id,
+            content_id: transcript.content_id,
             summary: summaryData.summary,
             key_points: summaryData.key_points || [],
             sentiment: summaryData.sentiment || 'neutral',
             topics: summaryData.topics || [],
-            platform: transcript.content.platform
+            platform: content.platform
           })
 
         if (insertError) {
-          console.error(`Error inserting summary:`, insertError)
-          errors.push({ content_id: transcript.content.id, error: insertError.message })
+          results.push({
+            content_id: transcript.content_id,
+            success: false,
+            error: insertError.message
+          })
         } else {
-          processed.push({ content_id: transcript.content.id, summary_generated: true })
+          results.push({
+            content_id: transcript.content_id,
+            success: true
+          })
         }
 
       } catch (error) {
-        console.error(`Error processing transcript:`, error)
-        errors.push({
-          content_id: transcript.content.id,
+        results.push({
+          content_id: transcript.content_id,
+          success: false,
           error: error instanceof Error ? error.message : 'Processing failed'
         })
       }
     }
 
+    const successCount = results.filter(r => r.success).length
+    const remaining = Math.max(0, uniqueTranscripts.length - 10)
+
     return NextResponse.json({
-      processed,
-      errors,
-      processingTime: Date.now() - startTime,
-      llm_provider: DEFAULT_LLM_PROVIDER
+      message: `Generated ${successCount} summaries${remaining > 0 ? `, ${remaining} remaining` : ''}`,
+      processed: successCount,
+      total: uniqueTranscripts.length,
+      remaining: remaining,
+      results
     })
 
   } catch (error) {
+    console.error('Ensure summaries error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -52,30 +52,56 @@ function createLLMInstance() {
 }
 
 const SUMMARIZATION_PROMPT = PromptTemplate.fromTemplate(`
-You are an AI assistant that creates concise summaries of social media content. 
+You are an expert content analyst specializing in social media video transcripts. Your goal is to extract maximum value from transcripts so users can quickly understand the content without watching the video.
 
-Content Details:
+## Content Metadata
 - Creator: @{creator}
 - Platform: {platform}
 - Title: {title}
 - Caption: {caption}
 
-Transcript:
+## Transcript
 {transcript}
 
-Please provide a JSON response with:
-1. A brief 2-3 sentence summary
-2. 3-5 key points as an array
-3. Overall sentiment
-4. 2-3 main topics as an array
+## Instructions
+Analyze the transcript and provide a comprehensive yet concise summary that captures:
 
-Response format:
+1. **Summary**: A clear 2-4 sentence overview that captures the main message and purpose of the content. Focus on what the creator wants the audience to know or do.
+
+2. **Key Points**: Extract 3-7 of the most important takeaways, insights, or arguments. Prioritize:
+   - Actionable advice or recommendations
+   - Notable facts, statistics, or data mentioned
+   - Core arguments or claims
+   - Important examples or case studies
+   - Controversial or unique perspectives
+
+3. **Key Information & References**: Identify any:
+   - Names of people, products, companies, or brands mentioned
+   - Book titles, studies, or sources cited
+   - Specific tools, resources, or links referenced
+   - Important dates, numbers, or statistics
+   - Calls-to-action or next steps suggested
+
+
+4. **Topics/Categories**: List 2-4 main topics or themes that best categorize this content
+
+## Output Format
+Respond ONLY with valid JSON. No markdown formatting, no code blocks, just raw JSON in this exact structure:
+
 {{
-  "summary": "Brief summary here",
-  "key_points": ["Point 1", "Point 2", "Point 3"],
-  "sentiment": "positive",
-  "topics": ["topic1", "topic2"]
+  "summary": "string",
+  "key_points": ["string"],
+  "key_information": {{
+    "references": ["string"],
+    "statistics": ["string"],
+    "people_mentioned": ["string"],
+    "resources": ["string"]
+  }},
+  "topics": ["string"],
+  "content_type": "string"
 }}
+
+If any section has no relevant information, use an empty array [] or null.
 `)
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
