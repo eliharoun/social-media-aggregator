@@ -275,14 +275,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - 🐛 **Bug Reports**: [Open an issue](https://github.com/eliharoun/social-media-aggregator/issues)
 - 💡 **Feature Requests**: [Start a discussion](https://github.com/eliharoun/social-media-aggregator/discussions)
-- 📧 **Contact**: [eli@example.com](mailto:eli@example.com)
-
 ---
 
 <div align="center">
 
 **⭐ Star this repo if you find it useful!**
-
-Made with ❤️ by [Eli Haroun](https://github.com/eliharoun)
 
 </div>
