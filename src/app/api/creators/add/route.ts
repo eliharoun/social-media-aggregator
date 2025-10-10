@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 
 // TikTok API configuration (from existing proof of concept)
 const RAPIDAPI_KEYS = [

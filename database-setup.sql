@@ -99,6 +99,30 @@ CREATE POLICY "Users can view content from followed creators" ON public.content
     )
   );
 
+-- Allow inserting content for followed creators
+CREATE POLICY "Users can insert content for followed creators" ON public.content
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.favorite_creators fc
+      WHERE fc.user_id = auth.uid()
+      AND fc.platform = content.platform
+      AND fc.username = content.creator_username
+      AND fc.is_active = true
+    )
+  );
+
+-- Allow updating content for followed creators
+CREATE POLICY "Users can update content for followed creators" ON public.content
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM public.favorite_creators fc
+      WHERE fc.user_id = auth.uid()
+      AND fc.platform = content.platform
+      AND fc.username = content.creator_username
+      AND fc.is_active = true
+    )
+  );
+
 -- Transcripts policies
 CREATE POLICY "Users can view transcripts of accessible content" ON public.transcripts
   FOR SELECT USING (
