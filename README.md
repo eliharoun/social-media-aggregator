@@ -280,7 +280,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 - 🐛 **Bug Reports**: [Open an issue](https://github.com/eliharoun/social-media-aggregator/issues)
-- 💡 **Feature Requests**: [Start a discussion](https://github.com/eliharoun/social-media-aggregator/discussions)
 ---
 
 <div align="center">
