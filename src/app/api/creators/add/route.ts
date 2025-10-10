@@ -35,7 +35,6 @@ async function validateTikTokCreator(username: string) {
         }
       }
     } catch (_err) {
-      console.log(`TikTok API key ${i + 1} failed, trying next...`)
       continue
     }
   }

@@ -7,8 +7,6 @@ export async function GET(request: NextRequest) {
     const authorization = request.headers.get('authorization')
     const token = authorization?.replace('Bearer ', '')
     
-    console.log('Auth header present:', !!authorization)
-    console.log('Token present:', !!token)
     
     if (!token) {
       return NextResponse.json(
@@ -41,15 +39,7 @@ export async function GET(request: NextRequest) {
     // Get current user using the provided token
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
-    console.log('Auth debug:', { 
-      hasUser: !!user, 
-      userId: user?.id, 
-      userEmail: user?.email,
-      authError: authError?.message 
-    })
-    
     if (authError || !user) {
-      console.log('Authentication failed:', authError?.message || 'No user found')
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }

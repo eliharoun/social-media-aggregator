@@ -115,7 +115,6 @@ export function ContentManager({ onContentUpdate }: ContentManagerProps) {
 
       if (contentResponse.ok) {
         const contentData = await contentResponse.json()
-        console.log('Content fetched:', contentData.content?.length || 0, 'items')
         onContentUpdate(contentData.content || [])
       } else {
         console.error('Failed to fetch content list:', await contentResponse.text())

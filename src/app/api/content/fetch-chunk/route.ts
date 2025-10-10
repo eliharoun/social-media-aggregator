@@ -47,7 +47,6 @@ async function fetchTikTokVideos(username: string, secUid: string, count = 10) {
         }))
       }
     } catch (err) {
-      console.log(`TikTok API key ${i + 1} failed, trying next...`)
       continue
     }
   }
@@ -132,7 +131,6 @@ export async function POST(request: NextRequest) {
     for (const creator of creators) {
       // Check if we're approaching timeout
       if (Date.now() - startTime > 8000) {
-        console.log('Approaching timeout, stopping processing')
         break
       }
 
@@ -185,10 +183,9 @@ export async function POST(request: NextRequest) {
                   .insert(video)
                 
                 if (insertError) {
-                  console.error('Error inserting content:', insertError, 'Video:', video)
+                  console.error('Error inserting content:', insertError)
                 } else {
                   insertedCount++
-                  console.log('Inserted video:', video.platform_content_id)
                 }
               } else {
                 // Update existing content stats
@@ -204,7 +201,6 @@ export async function POST(request: NextRequest) {
                   console.error('Error updating content:', updateError)
                 } else {
                   updatedCount++
-                  console.log('Updated video:', video.platform_content_id)
                 }
               }
             } catch (dbError) {
@@ -212,7 +208,6 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          console.log(`Database operations for ${creator.username}: ${insertedCount} inserted, ${updatedCount} updated`)
 
           processed.push({
             creator: creator.username,

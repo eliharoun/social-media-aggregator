@@ -56,7 +56,6 @@ async function getTranscriptFromAPI(videoUrls: string[], retryCount = 0) {
     throw new Error('No transcript data returned')
   } catch (error) {
     if (retryCount < TRANSCRIPT_API_KEYS.length - 1) {
-      console.log(`Transcript API key ${retryCount + 1} failed, trying next...`)
       return getTranscriptFromAPI(videoUrls, retryCount + 1)
     }
     throw error
@@ -140,7 +139,6 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < contentItems.length; i += BATCH_SIZE) {
       // Check timeout
       if (Date.now() - startTime > 8000) {
-        console.log('Approaching timeout, stopping transcript processing')
         break
       }
 

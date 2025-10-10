@@ -93,7 +93,6 @@ export function AIProcessor({ content, onProcessingComplete }: AIProcessorProps)
             if (summaryResponse.ok) {
               const batchSummariesGenerated = summaryResult.processed?.filter((p: { summary_generated: boolean }) => p.summary_generated).length || 0
               totalSummariesGenerated += batchSummariesGenerated
-              console.log(`Batch ${batchNumber} completed: ${batchSummariesGenerated} summaries generated`)
             } else {
               console.error(`Batch ${batchNumber} failed:`, summaryResult.error)
             }

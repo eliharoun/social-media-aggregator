@@ -4,7 +4,6 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   // Temporarily disable middleware to test navigation
   // Will re-enable after fixing authentication flow
-  console.log('Middleware called for:', request.nextUrl.pathname)
   return NextResponse.next()
 }
 

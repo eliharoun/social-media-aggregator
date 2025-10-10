@@ -32,19 +32,14 @@ export default function DashboardPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      console.log('Fetching content list...')
       const response = await fetch(`/api/content/list?limit=10&offset=${offset}`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
       })
-
-      console.log('Content list response status:', response.status)
       
       if (response.ok) {
         const data = await response.json()
-        console.log('Content list data:', data)
-        console.log('Content array length:', data.content?.length || 0)
         setContent(data.content || [])
         setPagination({
           limit: data.pagination?.limit || 10,

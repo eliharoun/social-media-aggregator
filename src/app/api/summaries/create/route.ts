@@ -98,18 +98,13 @@ export async function POST(request: NextRequest) {
     const processed: Array<{ content_id: string; summary_generated?: boolean; already_exists?: boolean }> = []
     const errors: Array<{ content_id: string; error: string }> = []
 
-    console.log(`Processing ${transcripts.length} transcripts for summaries`)
-
     // Process transcripts sequentially to avoid timeout issues
     for (const transcript of transcripts) {
       if (Date.now() - startTime > 8000) {
-        console.log('Timeout approaching, stopping summary processing')
         break
       }
 
       try {
-        console.log(`Processing transcript for content ${transcript.content.id}`)
-        
         const { data: existingSummary } = await supabase
           .from('summaries')
           .select('id')
@@ -117,13 +112,10 @@ export async function POST(request: NextRequest) {
           .single()
 
         if (existingSummary) {
-          console.log(`Summary already exists for content ${transcript.content.id}`)
           processed.push({ content_id: transcript.content.id, already_exists: true })
           continue
         }
 
-        console.log(`Generating summary for content ${transcript.content.id}`)
-        
         const prompt = await SUMMARIZATION_PROMPT.format({
           creator: transcript.content.creator_username,
           platform: transcript.content.platform,
@@ -132,17 +124,13 @@ export async function POST(request: NextRequest) {
           transcript: transcript.transcript_text
         })
 
-        console.log(`Calling LLM for content ${transcript.content.id}`)
         const response = await llm.invoke(prompt)
-        console.log(`LLM response received for content ${transcript.content.id}:`, response.content)
         
         let summaryData
 
         try {
           summaryData = JSON.parse(response.content as string)
-          console.log(`Parsed summary data for content ${transcript.content.id}:`, summaryData)
         } catch (parseError) {
-          console.log(`JSON parse failed for content ${transcript.content.id}, using fallback:`, parseError)
           summaryData = {
             summary: (response.content as string).substring(0, 500),
             key_points: [],
@@ -151,7 +139,6 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        console.log(`Inserting summary for content ${transcript.content.id}`)
         const { error: insertError } = await supabase
           .from('summaries')
           .insert({
@@ -164,15 +151,14 @@ export async function POST(request: NextRequest) {
           })
 
         if (insertError) {
-          console.error(`Error inserting summary for content ${transcript.content.id}:`, insertError)
+          console.error(`Error inserting summary:`, insertError)
           errors.push({ content_id: transcript.content.id, error: insertError.message })
         } else {
-          console.log(`Successfully created summary for content ${transcript.content.id}`)
           processed.push({ content_id: transcript.content.id, summary_generated: true })
         }
 
       } catch (error) {
-        console.error(`Error processing transcript for content ${transcript.content.id}:`, error)
+        console.error(`Error processing transcript:`, error)
         errors.push({
           content_id: transcript.content.id,
           error: error instanceof Error ? error.message : 'Processing failed'
