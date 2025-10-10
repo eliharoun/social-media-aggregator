@@ -1,4 +1,4 @@
--- Social Media Aggregator Database Setup
+-- Social Media Aggregator Database Setup (Complete)
 -- Run this script in your Supabase SQL editor
 
 -- Favorite Creators table (multi-platform support)
@@ -71,6 +71,31 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
   auto_expand_summaries BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- User Profiles table to store additional user information
+CREATE TABLE IF NOT EXISTS public.user_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
+  display_name TEXT,
+  avatar_url TEXT,
+  bio TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- User Content Interactions table to track read/saved status
+CREATE TABLE IF NOT EXISTS public.user_content_interactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  content_id UUID REFERENCES public.content(id) ON DELETE CASCADE,
+  is_read BOOLEAN DEFAULT FALSE,
+  is_saved BOOLEAN DEFAULT FALSE,
+  read_at TIMESTAMP WITH TIME ZONE,
+  saved_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, content_id)
 );
 
 -- Row Level Security Policies
@@ -202,12 +227,40 @@ CREATE POLICY "Users can insert own settings" ON public.user_settings
 CREATE POLICY "Users can update own settings" ON public.user_settings
   FOR UPDATE USING (auth.uid() = user_id);
 
+-- User profiles policies
+CREATE POLICY "Users can view own profile" ON public.user_profiles
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own profile" ON public.user_profiles
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own profile" ON public.user_profiles
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own profile" ON public.user_profiles
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- User content interactions policies
+CREATE POLICY "Users can view own interactions" ON public.user_content_interactions
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own interactions" ON public.user_content_interactions
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own interactions" ON public.user_content_interactions
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own interactions" ON public.user_content_interactions
+  FOR DELETE USING (auth.uid() = user_id);
+
 -- Enable RLS on all tables
 ALTER TABLE public.favorite_creators ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.content ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transcripts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.summaries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_content_interactions ENABLE ROW LEVEL SECURITY;
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_favorite_creators_user_platform ON public.favorite_creators(user_id, platform);
@@ -215,6 +268,10 @@ CREATE INDEX IF NOT EXISTS idx_content_platform_creator ON public.content(platfo
 CREATE INDEX IF NOT EXISTS idx_content_created_at ON public.content(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_transcripts_content_id ON public.transcripts(content_id);
 CREATE INDEX IF NOT EXISTS idx_summaries_content_id ON public.summaries(content_id);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON public.user_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_content_interactions_user_content ON public.user_content_interactions(user_id, content_id);
+CREATE INDEX IF NOT EXISTS idx_user_content_interactions_user_read ON public.user_content_interactions(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_user_content_interactions_user_saved ON public.user_content_interactions(user_id, is_saved);
 
 -- Function to automatically create user settings when a user signs up
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -226,11 +283,51 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Function to automatically create user profile when a user signs up
+CREATE OR REPLACE FUNCTION public.handle_new_user_profile()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.user_profiles (user_id, display_name)
+  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'display_name', ''));
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to update updated_at timestamp
+CREATE OR REPLACE FUNCTION public.handle_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Trigger to create user settings on signup
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Trigger to create user profile on signup
+DROP TRIGGER IF EXISTS on_auth_user_created_profile ON auth.users;
+CREATE TRIGGER on_auth_user_created_profile
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user_profile();
+
+-- Trigger to update updated_at on user_settings
+CREATE TRIGGER handle_user_settings_updated_at
+  BEFORE UPDATE ON public.user_settings
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- Trigger to update updated_at on user_profiles
+CREATE TRIGGER handle_user_profiles_updated_at
+  BEFORE UPDATE ON public.user_profiles
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- Trigger to update updated_at on user_content_interactions
+CREATE TRIGGER handle_user_content_interactions_updated_at
+  BEFORE UPDATE ON public.user_content_interactions
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA public TO anon, authenticated;

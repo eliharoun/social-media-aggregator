@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Layout } from '@/components/layout/Layout'
 import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/components/auth/AuthProvider'
 
 interface UserSettings {
   id?: string
@@ -37,11 +36,8 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('tiktok')
   const [message, setMessage] = useState('')
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const router = useRouter()
-  const { user, signOut } = useAuth()
 
   useEffect(() => {
     loadSettings()
@@ -175,33 +171,6 @@ export default function SettingsPage() {
     } catch (err) {
       setMessage('Failed to clear cache')
       setTimeout(() => setMessage(''), 3000)
-    }
-  }
-
-  const deleteAccount = async () => {
-    if (!confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
-      return
-    }
-
-    setIsDeleting(true)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-
-      // Delete user data
-      await supabase.from('user_settings').delete().eq('user_id', session.user.id)
-      await supabase.from('favorite_creators').delete().eq('user_id', session.user.id)
-      
-      // Sign out and delete auth user
-      await supabase.auth.signOut()
-      
-      // Redirect to home page
-      router.push('/')
-    } catch (err) {
-      setMessage('Failed to delete account')
-      setTimeout(() => setMessage(''), 3000)
-    } finally {
-      setIsDeleting(false)
     }
   }
 
@@ -502,9 +471,9 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Account & Data Management */}
+          {/* Data Management */}
           <div className="bg-white rounded-2xl shadow-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-6">Account & Data</h2>
+            <h2 className="text-xl font-semibold text-gray-800 mb-6">Data Management</h2>
             
             <div className="space-y-6">
               {/* Cache Management */}
@@ -540,58 +509,9 @@ export default function SettingsPage() {
                 </button>
               </div>
 
-              {/* Account Deletion */}
-              <div className="border border-red-200 rounded-lg p-4 bg-red-50">
-                <h3 className="font-medium text-red-800 mb-2">Delete Account</h3>
-                <p className="text-sm text-red-700 mb-4">
-                  Permanently delete your account and all associated data. This action cannot be undone.
-                </p>
-                <button
-                  onClick={deleteAccount}
-                  disabled={isDeleting}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isDeleting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Deleting...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                      Delete Account
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Sign Out */}
+              {/* App Info */}
               <div className="border border-gray-200 rounded-lg p-4">
-                <h3 className="font-medium text-gray-800 mb-2">Sign Out</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Sign out of your account. Your settings and data will be preserved.
-                </p>
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-600">
-                    Signed in as: <span className="font-medium">{user?.email}</span>
-                  </div>
-                  <button
-                    onClick={signOut}
-                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    Sign Out
-                  </button>
-                </div>
-              </div>
-
-              {/* Account Info */}
-              <div className="border border-gray-200 rounded-lg p-4">
-                <h3 className="font-medium text-gray-800 mb-2">Account Information</h3>
+                <h3 className="font-medium text-gray-800 mb-2">Application Information</h3>
                 <div className="text-sm text-gray-600 space-y-1">
                   <p>Settings are automatically synced across your devices</p>
                   <p>All data is stored securely with end-to-end encryption</p>
