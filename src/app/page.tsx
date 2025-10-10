@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { LoginForm } from '@/components/auth/LoginForm'
 import { SignupForm } from '@/components/auth/SignupForm'
 import { Layout } from '@/components/layout/Layout'
@@ -41,7 +42,7 @@ export default function HomePage() {
             <p className="text-gray-600 mb-6">
               Start by adding your favorite creators from TikTok, YouTube, or Instagram to see their latest content summaries here.
             </p>
-            <a
+            <Link
               href="/creators"
               className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-lg font-semibold hover:from-pink-600 hover:to-purple-600 transition-all"
             >
@@ -49,7 +50,7 @@ export default function HomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
               Add Creators
-            </a>
+            </Link>
           </div>
         </div>
       </Layout>
@@ -67,9 +68,9 @@ export default function HomePage() {
             <h1 className="text-5xl font-bold text-gray-800">Stop Endless Scrolling</h1>
           </div>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            <span className="text-red-500 font-semibold">You're wasting hours</span> scrolling through TikTok, YouTube, and Instagram looking for quality content. 
-            <span className="text-green-600 font-semibold"> Get AI-powered summaries</span> of your favorite creators' latest posts and 
-            <span className="text-purple-600 font-semibold"> only watch what's actually worth your time.</span>
+            <span className="text-red-500 font-semibold">You&apos;re wasting hours</span> scrolling through TikTok, YouTube, and Instagram looking for quality content. 
+            <span className="text-green-600 font-semibold">Get AI-powered summaries</span> of your favorite creators&apos; latest posts and 
+            <span className="text-purple-600 font-semibold">only watch what&apos;s actually worth your time.</span>
           </p>
         </div>
 
@@ -83,7 +84,7 @@ export default function HomePage() {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-2">⏰ Save 2+ Hours Daily</h3>
-                <p className="text-gray-600">Stop jumping between TikTok, YouTube, and Instagram. Get all your favorite creators' content in one place.</p>
+                <p className="text-gray-600">Stop jumping between TikTok, YouTube, and Instagram. Get all your favorite creators&apos; content in one place.</p>
               </div>
             </div>
 
@@ -95,7 +96,7 @@ export default function HomePage() {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-2">🎯 Skip the Fluff</h3>
-                <p className="text-gray-600">AI extracts key insights from every video. Read the summary, then decide if it's worth watching the full content.</p>
+                <p className="text-gray-600">AI extracts key insights from every video. Read the summary, then decide if it&apos;s worth watching the full content.</p>
               </div>
             </div>
 
