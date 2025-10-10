@@ -8,6 +8,12 @@
 
 > An AI-powered social media content aggregation platform that transforms how you consume content from your favorite creators across TikTok, YouTube, and Instagram.
 
+## 🌐 Live Demo
+
+**Try it now**: [https://social-media-aggregator-phi.vercel.app/](https://social-media-aggregator-phi.vercel.app/)
+
+*Install as a mobile app directly from your browser!*
+
 ## 🌟 Features
 
 - 🤖 **AI-Powered Summaries** - Intelligent content analysis using OpenAI and Anthropic
