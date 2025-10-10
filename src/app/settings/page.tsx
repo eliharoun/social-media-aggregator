@@ -14,6 +14,7 @@ interface UserSettings {
   auto_refresh_enabled: boolean
   refresh_interval_hours: number
   enabled_platforms: string[]
+  auto_expand_summaries: boolean
   created_at?: string
   updated_at?: string
 }
@@ -25,7 +26,8 @@ const DEFAULT_SETTINGS: UserSettings = {
   max_content_per_creator: 10,
   auto_refresh_enabled: true,
   refresh_interval_hours: 6,
-  enabled_platforms: ['tiktok']
+  enabled_platforms: ['tiktok'],
+  auto_expand_summaries: false
 }
 
 export default function SettingsPage() {
@@ -83,8 +85,8 @@ export default function SettingsPage() {
         console.error('Error saving settings:', error)
         setMessage('Failed to save settings')
       } else {
-        setMessage('Settings saved successfully!')
-        setTimeout(() => setMessage(''), 3000)
+        setMessage('Settings saved successfully! Go to your feed and click "Refresh Feed" to see the changes.')
+        setTimeout(() => setMessage(''), 5000)
       }
     } catch (err) {
       console.error('Failed to save settings:', err)
@@ -299,6 +301,23 @@ export default function SettingsPage() {
                   </p>
                 </div>
               )}
+
+              {/* Auto-Expand Summaries */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-800">Auto-Expand AI Summaries</h3>
+                  <p className="text-sm text-gray-600">Automatically show AI summaries when they become ready</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.auto_expand_summaries}
+                    onChange={(e) => setSettings(prev => ({ ...prev, auto_expand_summaries: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
             </div>
           </div>
 

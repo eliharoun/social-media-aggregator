@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
 
     const usernames = followedCreators.map(c => c.username)
 
-    // Build query to get content from followed creators
+    // Build query to get content from followed creators with processing status
     let query = supabase
       .from('content')
       .select(`

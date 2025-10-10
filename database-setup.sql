@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
   auto_refresh_enabled BOOLEAN DEFAULT TRUE,
   refresh_interval_hours INTEGER DEFAULT 6,
   enabled_platforms TEXT[] DEFAULT ARRAY['tiktok'],
+  auto_expand_summaries BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

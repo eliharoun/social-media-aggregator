@@ -3,67 +3,150 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Layout } from '@/components/layout/Layout'
-import { ContentManager } from '@/components/dashboard/ContentManager'
 import { ContentCard } from '@/components/dashboard/ContentCard'
-import { AIProcessor } from '@/components/dashboard/AIProcessor'
+import { InfiniteScrollContainer } from '@/components/dashboard/InfiniteScrollContainer'
 import { Content, supabase } from '@/lib/supabase'
+import { useContentProcessing } from '@/hooks/useContentProcessing'
+
+interface DashboardState {
+  allContent: Content[]
+  displayedContent: Content[]
+  currentPage: number
+  totalPages: number
+  isRefreshing: boolean
+  isLoadingMore: boolean
+}
 
 export default function DashboardPage() {
-  const [content, setContent] = useState<Content[]>([])
-  const [loading, setLoading] = useState(true)
-  const [pagination, setPagination] = useState({
-    limit: 10,
-    offset: 0,
-    total: 0,
-    hasMore: false
+  const [feedState, setFeedState] = useState<DashboardState>({
+    allContent: [],
+    displayedContent: [],
+    currentPage: 1,
+    totalPages: 0,
+    isRefreshing: false,
+    isLoadingMore: false
   })
+
   const [filters, setFilters] = useState({
     platform: 'all',
     sortBy: 'newest'
   })
 
+  const [userSettings, setUserSettings] = useState<{ auto_expand_summaries: boolean } | null>(null)
+
+  const { processPage, getStatus, resetStatus, isProcessing } = useContentProcessing()
+
+  // Load user settings for auto-expand functionality
   useEffect(() => {
-    fetchContent()
+    loadUserSettings()
   }, [])
 
-  const fetchContent = async (offset = 0) => {
+  const loadUserSettings = async () => {
     try {
-      setLoading(true)
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      const response = await fetch(`/api/content/list?limit=10&offset=${offset}`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setContent(data.content || [])
-        setPagination({
-          limit: data.pagination?.limit || 10,
-          offset: data.pagination?.offset || 0,
-          total: data.total || 0,
-          hasMore: data.hasMore || false
-        })
-      } else {
-        console.error('Content list error:', await response.text())
+      const { data: settings } = await supabase
+        .from('user_settings')
+        .select('auto_expand_summaries')
+        .eq('user_id', session.user.id)
+        .single()
+
+      if (settings) {
+        setUserSettings(settings)
       }
     } catch (err) {
-      console.error('Failed to fetch content:', err)
-    } finally {
-      setLoading(false)
+      // Use default settings if not found
+      setUserSettings({ auto_expand_summaries: false })
     }
   }
 
-  const handlePageChange = (newOffset: number) => {
-    fetchContent(newOffset)
+  useEffect(() => {
+    refreshEntireFeed()
+  }, [])
+
+  const refreshEntireFeed = async () => {
+    setFeedState(prev => ({ ...prev, isRefreshing: true }))
+    resetStatus()
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      // Step 1: Fetch all content from all creators
+      const response = await fetch('/api/content/fetch-all', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        
+        // Step 2: Update state with complete dataset
+        setFeedState(prev => ({
+          ...prev,
+          allContent: data.allContent || [],
+          displayedContent: data.firstPage || [],
+          currentPage: 1,
+          totalPages: data.totalPages || 0,
+          isRefreshing: false
+        }))
+
+        // Step 3: Auto-process first page
+        if (data.firstPage && data.firstPage.length > 0) {
+          const contentIds = data.firstPage
+            .filter((item: Content) => item.id) // Filter out items without IDs
+            .map((item: Content) => item.id)
+          
+          if (contentIds.length > 0) {
+            processPage(contentIds)
+          }
+        }
+      } else {
+        console.error('Failed to fetch content:', await response.text())
+        setFeedState(prev => ({ ...prev, isRefreshing: false }))
+      }
+    } catch (err) {
+      console.error('Failed to refresh feed:', err)
+      setFeedState(prev => ({ ...prev, isRefreshing: false }))
+    }
   }
 
-  const handleContentUpdate = (newContent: Content[]) => {
-    setContent(newContent)
+  const loadNextPage = async () => {
+    if (feedState.isLoadingMore || feedState.currentPage >= feedState.totalPages) return
+
+    setFeedState(prev => ({ ...prev, isLoadingMore: true }))
+
+    try {
+      // Get next page from cached content
+      const startIndex = feedState.currentPage * 10
+      const endIndex = startIndex + 10
+      const nextPageContent = feedState.allContent.slice(startIndex, endIndex)
+
+      // Update displayed content
+      setFeedState(prev => ({
+        ...prev,
+        displayedContent: [...prev.displayedContent, ...nextPageContent],
+        currentPage: prev.currentPage + 1,
+        isLoadingMore: false
+      }))
+
+      // Auto-process new page
+      if (nextPageContent.length > 0) {
+        const contentIds = nextPageContent.map(item => item.id)
+        processPage(contentIds)
+      }
+
+    } catch (err) {
+      console.error('Failed to load next page:', err)
+      setFeedState(prev => ({ ...prev, isLoadingMore: false }))
+    }
   }
+
+  const hasMore = feedState.currentPage < feedState.totalPages
 
   return (
     <Layout>
@@ -73,32 +156,76 @@ export default function DashboardPage() {
           <p className="text-gray-600">AI-powered summaries from your favorite creators across all platforms</p>
         </div>
 
-        <ContentManager onContentUpdate={handleContentUpdate} />
-        
-        {content.length > 0 && (
-          <AIProcessor 
-            content={content} 
-            onProcessingComplete={() => fetchContent(pagination.offset)} 
-          />
-        )}
+        {/* Unified Refresh Button */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-800">Content Feed</h2>
+            <button
+              onClick={refreshEntireFeed}
+              disabled={feedState.isRefreshing}
+              className="px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-lg font-semibold hover:from-pink-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+            >
+              {feedState.isRefreshing ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Refreshing Feed...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh Feed
+                </>
+              )}
+            </button>
+          </div>
 
-        {loading ? (
+          {feedState.isRefreshing && (
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 text-blue-700 text-sm mb-4">
+              🔄 Fetching latest content from all creators and preparing AI summaries...
+            </div>
+          )}
+
+          {isProcessing && (
+            <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-3 text-purple-700 text-sm mb-4">
+              🤖 Processing transcripts and generating AI summaries for current page...
+            </div>
+          )}
+
+          <div className="text-sm text-gray-600">
+            <p className="mb-2">
+              <strong>Total Content:</strong> {feedState.allContent.length} items across all creators
+            </p>
+            <p>
+              Click &quot;Refresh Feed&quot; to fetch the latest content and automatically generate AI summaries. 
+              Scroll up to load more pages with automatic processing.
+            </p>
+          </div>
+        </div>
+
+        {feedState.isRefreshing ? (
           <div className="space-y-6">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-white rounded-xl shadow-md p-6">
-                <div className="animate-pulse flex gap-4">
-                  <div className="w-32 h-48 bg-gray-200 rounded-lg"></div>
+              <div key={i} className="bg-white rounded-xl shadow-md p-6 animate-fadeIn" style={{ animationDelay: `${i * 0.1}s` }}>
+                <div className="flex gap-4">
+                  <div className="w-32 h-48 bg-gray-200 rounded-lg animate-shimmer"></div>
                   <div className="flex-1 space-y-3">
-                    <div className="h-6 bg-gray-200 rounded w-3/4"></div>
-                    <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                    <div className="h-4 bg-gray-200 rounded"></div>
-                    <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                    <div className="h-6 bg-gray-200 rounded w-3/4 animate-shimmer"></div>
+                    <div className="h-4 bg-gray-200 rounded w-1/2 animate-shimmer"></div>
+                    <div className="h-4 bg-gray-200 rounded animate-shimmer"></div>
+                    <div className="h-4 bg-gray-200 rounded w-2/3 animate-shimmer"></div>
+                    <div className="flex gap-2 mt-4">
+                      <div className="h-8 w-20 bg-gray-200 rounded-lg animate-shimmer"></div>
+                      <div className="h-8 w-24 bg-gray-200 rounded-lg animate-shimmer"></div>
+                      <div className="h-8 w-20 bg-gray-200 rounded-lg animate-shimmer"></div>
+                    </div>
                   </div>
                 </div>
               </div>
             ))}
           </div>
-        ) : content.length === 0 ? (
+        ) : feedState.displayedContent.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -107,7 +234,7 @@ export default function DashboardPage() {
             </div>
             <h2 className="text-xl font-semibold text-gray-800 mb-2">No Content Yet</h2>
             <p className="text-gray-600 mb-6">
-              Add some creators and fetch their latest content to see your personalized feed here.
+              Add some creators and refresh your feed to see AI-powered summaries from your favorite creators.
             </p>
             <Link
               href="/creators"
@@ -158,51 +285,36 @@ export default function DashboardPage() {
 
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-gray-600">
-                    {pagination.total} total, showing {content.length}
+                    Showing {feedState.displayedContent.length} of {feedState.allContent.length}
                   </span>
-                  <button
-                    onClick={() => fetchContent(pagination.offset)}
-                    className="text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Refresh
-                  </button>
+                  {hasMore && (
+                    <span className="text-xs text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
+                      Scroll up for more
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="grid gap-6">
-              {content.map((item) => (
-                <ContentCard key={item.id} content={item} />
-              ))}
-            </div>
-
-            {/* Pagination Controls */}
-            {pagination.total > 10 && (
-              <div className="flex items-center justify-center gap-4 mt-8">
-                <button
-                  onClick={() => handlePageChange(Math.max(0, pagination.offset - 10))}
-                  disabled={pagination.offset === 0}
-                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Previous
-                </button>
-                
-                <span className="text-sm text-gray-600">
-                  Page {Math.floor(pagination.offset / 10) + 1} of {Math.ceil(pagination.total / 10)}
-                </span>
-                
-                <button
-                  onClick={() => handlePageChange(pagination.offset + 10)}
-                  disabled={!pagination.hasMore}
-                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next
-                </button>
+            {/* Infinite Scroll Container */}
+            <InfiniteScrollContainer
+              onLoadMore={loadNextPage}
+              onRefresh={refreshEntireFeed}
+              isLoading={feedState.isLoadingMore}
+              hasMore={hasMore}
+              enablePullToRefresh={true}
+            >
+              <div className="grid gap-6">
+                {feedState.displayedContent.map((item) => (
+                  <ContentCard 
+                    key={`content-${item.id}`}
+                    content={item} 
+                    processingStatus={getStatus(item.id)}
+                    autoExpandSummary={userSettings?.auto_expand_summaries || false}
+                  />
+                ))}
               </div>
-            )}
+            </InfiniteScrollContainer>
           </div>
         )}
       </div>

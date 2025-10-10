@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { Content, supabase } from '@/lib/supabase'
 import { Modal } from '@/components/ui/Modal'
+import { ProcessingStatus } from '@/hooks/useContentProcessing'
+import { ProcessingIndicator } from './ProcessingIndicator'
 
 interface Summary {
   id: string
@@ -22,12 +24,14 @@ interface Transcript {
 
 interface ContentCardProps {
   content: Content
+  processingStatus?: ProcessingStatus
+  autoExpandSummary?: boolean
 }
 
-export function ContentCard({ content }: ContentCardProps) {
+export function ContentCard({ content, processingStatus, autoExpandSummary = false }: ContentCardProps) {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [transcript, setTranscript] = useState<Transcript | null>(null)
-  const [showSummary, setShowSummary] = useState(false)
+  const [showSummary, setShowSummary] = useState(autoExpandSummary)
   const [showTranscriptModal, setShowTranscriptModal] = useState(false)
   const [isRead, setIsRead] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
@@ -37,6 +41,26 @@ export function ContentCard({ content }: ContentCardProps) {
     fetchTranscript()
     loadUserPreferences()
   }, [content.id])
+
+  // Auto-expand summary when it becomes available (if enabled)
+  useEffect(() => {
+    if (autoExpandSummary && summary && processingStatus?.hasSummary) {
+      // Add a small delay for smooth animation
+      setTimeout(() => {
+        setShowSummary(true)
+      }, 300)
+    }
+  }, [summary, processingStatus?.hasSummary, autoExpandSummary])
+
+  // Refresh summary and transcript when processing status changes
+  useEffect(() => {
+    if (processingStatus?.hasSummary && !summary) {
+      fetchSummary()
+    }
+    if (processingStatus?.hasTranscript && !transcript) {
+      fetchTranscript()
+    }
+  }, [processingStatus?.hasSummary, processingStatus?.hasTranscript, summary, transcript])
 
   const fetchSummary = async () => {
     try {
@@ -207,6 +231,16 @@ export function ContentCard({ content }: ContentCardProps) {
             <span className="text-sm text-gray-500">
               • {content.created_at ? formatDate(content.created_at) : 'Unknown date'}
             </span>
+            
+            {/* Processing Status Indicator */}
+            {processingStatus && (
+              <div className="ml-auto">
+                <ProcessingIndicator 
+                  status={processingStatus} 
+                  size="sm"
+                />
+              </div>
+            )}
           </div>
 
           {/* Title */}
@@ -368,7 +402,7 @@ export function ContentCard({ content }: ContentCardProps) {
 
       {/* AI Summary Section */}
       {showSummary && summary && (
-        <div className="border-t border-gray-100 p-6 bg-gradient-to-r from-purple-50 to-blue-50">
+        <div className="border-t border-gray-100 p-6 bg-gradient-to-r from-purple-50 to-blue-50 animate-slideDown">
           <div className="flex items-center gap-2 mb-4">
             <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />

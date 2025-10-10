@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 interface AuthContextType {
   user: User | null
   loading: boolean
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>
+  signIn: (email: string, password: string) => Promise<{ error: AuthError | { message: string } | null }>
   signUp: (email: string, password: string) => Promise<{ error: AuthError | null }>
   signOut: () => Promise<void>
 }
@@ -37,11 +37,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    return { error }
+    try {
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Authentication timeout - please try again')), 10000)
+      })
+      
+      const authPromise = supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      
+      const result = await Promise.race([authPromise, timeoutPromise])
+      const { error } = result as { error: AuthError | null }
+      
+      return { error }
+    } catch (err) {
+      return { error: { message: err instanceof Error ? err.message : 'Authentication failed' } }
+    }
   }
 
   const signUp = async (email: string, password: string) => {

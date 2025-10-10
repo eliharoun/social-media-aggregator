@@ -22,16 +22,21 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
     setLoading(true)
     setError('')
 
-    const { error } = await signIn(email, password)
-    
-    if (error) {
-      setError(error.message)
-    } else {
-      // Redirect to dashboard on successful login
-      router.push('/dashboard')
+    try {
+      const { error } = await signIn(email, password)
+      
+      if (error) {
+        setError(error.message)
+        setLoading(false)
+      } else {
+        // Redirect to dashboard on successful login
+        router.push('/dashboard')
+        // Don't set loading to false here - let the redirect handle it
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
+      setLoading(false)
     }
-    
-    setLoading(false)
   }
 
   return (
@@ -80,7 +85,18 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
 
           {error && (
             <div className="bg-red-50 border-2 border-red-200 rounded-lg p-3 text-red-700 text-sm">
-              {error}
+              <p className="font-medium mb-2">Authentication Error:</p>
+              <p>{error}</p>
+              {error.includes('timeout') && (
+                <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-xs">
+                  <p className="font-medium">Troubleshooting:</p>
+                  <ul className="list-disc list-inside mt-1 space-y-1">
+                    <li>Check your internet connection</li>
+                    <li>Try refreshing the page</li>
+                    <li>Check if Supabase is accessible: <a href="https://sdbqltwikwveuhkedtte.supabase.co" target="_blank" className="underline">Test Connection</a></li>
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 
