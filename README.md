@@ -35,6 +35,37 @@ Install as a native mobile app:
 | **Android** | Chrome → Menu → "Install App" |
 | **Desktop** | Chrome/Edge → Install icon in address bar |
 
+## 📸 Screenshots
+
+<div align="center">
+
+<table>
+<tr>
+<td align="center" width="25%">
+<h4>⭐ Add Creators</h4>
+<img src="img/add_creators.jpeg" alt="Add Creators" width="200">
+<br><em>Easy creator management - add your favorite TikTok creators</em>
+</td>
+<td align="center" width="25%">
+<h4>📱 Content Feed</h4>
+<img src="img/feed.jpeg" alt="Content Feed" width="200">
+<br><em>AI-powered content feed with intelligent summaries and filtering</em>
+</td>
+<td align="center" width="25%">
+<h4>🤖 AI Summary</h4>
+<img src="img/summary.jpeg" alt="AI Summary" width="200">
+<br><em>Comprehensive AI-generated summaries with key points and sentiment analysis</em>
+</td>
+<td align="center" width="25%">
+<h4>📝 Full Transcripts</h4>
+<img src="img/transcript.jpeg" alt="Transcript View" width="200">
+<br><em>Complete video transcripts with searchable text</em>
+</td>
+</tr>
+</table>
+
+</div>
+
 ## 🚀 Quick Start
 
 ### Prerequisites
