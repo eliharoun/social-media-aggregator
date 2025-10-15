@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 
 interface InfiniteScrollContainerProps {
@@ -35,6 +35,24 @@ export function InfiniteScrollContainer({
     hasMore,
     debounceMs: 150
   })
+
+  const [showScrollIndicator, setShowScrollIndicator] = useState(false)
+
+  // Show scroll indicator when user is near bottom and there's more content
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollY = window.scrollY
+      const windowHeight = window.innerHeight
+      const documentHeight = document.documentElement.scrollHeight
+      const scrollPercentage = (scrollY + windowHeight) / documentHeight
+      
+      // Show indicator when user has scrolled 70% down and there's more content
+      setShowScrollIndicator(scrollPercentage > 0.7 && hasMore && !isLoading)
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [hasMore, isLoading])
 
   // Pull-to-refresh functionality for mobile
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -160,17 +178,51 @@ export function InfiniteScrollContainer({
         </div>
       )}
       
-      {/* Scroll to top button */}
-      {window.scrollY > 200 && (
+      {/* Enhanced Scroll Indicator for Loading More Content */}
+      {showScrollIndicator && (
+        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-50 animate-bounce">
+          <div className="bg-gradient-to-r from-purple-500 to-blue-500 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-3 animate-pulse">
+            <div className="flex flex-col items-center">
+              <svg className="w-5 h-5 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7-7m0 0l-7 7m7-7v18" />
+              </svg>
+              <div className="w-1 h-4 bg-white/30 rounded-full mt-1">
+                <div className="w-1 h-2 bg-white rounded-full animate-ping"></div>
+              </div>
+            </div>
+            <div className="text-sm font-medium">
+              <div>Scroll up for more</div>
+              <div className="text-xs opacity-80">AI content ready!</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scroll to top button - only show when scrolled down significantly */}
+      {typeof window !== 'undefined' && window.scrollY > 400 && (
         <button
           onClick={scrollToTop}
-          className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full shadow-lg transition-all duration-300 flex items-center justify-center"
+          className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full shadow-lg transition-all duration-300 flex items-center justify-center hover:scale-110"
           aria-label="Scroll to top"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
           </svg>
         </button>
+      )}
+
+      {/* Bottom Load More Indicator - appears at very bottom */}
+      {hasMore && !isLoading && isNearBottom && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
+          <div className="bg-white border-2 border-purple-200 text-purple-700 px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-pulse">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
+              <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+              <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+            </div>
+            <span className="text-sm font-medium">Keep scrolling...</span>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -360,11 +360,6 @@ export default function DashboardPage() {
                       Hide Read
                     </span>
                   )}
-                  {hasMore && (
-                    <span className="bg-purple-50 text-purple-600 px-2 py-1 rounded-full text-xs">
-                      Scroll ↑
-                    </span>
-                  )}
                 </div>
               </div>
 
