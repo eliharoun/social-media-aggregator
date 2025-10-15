@@ -35,17 +35,18 @@ CREATE TABLE IF NOT EXISTS public.content (
   UNIQUE(platform, platform_content_id)
 );
 
--- Transcripts table
+-- Transcripts table (with unique constraint to prevent duplicates)
 CREATE TABLE IF NOT EXISTS public.transcripts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   content_id UUID REFERENCES public.content(id) ON DELETE CASCADE,
   transcript_text TEXT NOT NULL,
   webvtt_data TEXT,
   language TEXT DEFAULT 'en',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(content_id) -- Ensures one transcript per content item
 );
 
--- Summaries table
+-- Summaries table (with unique constraint to prevent duplicates)
 CREATE TABLE IF NOT EXISTS public.summaries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   content_id UUID REFERENCES public.content(id) ON DELETE CASCADE,
@@ -54,7 +55,8 @@ CREATE TABLE IF NOT EXISTS public.summaries (
   sentiment TEXT,
   topics TEXT[],
   platform TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(content_id) -- Ensures one summary per content item
 );
 
 -- User Settings table
@@ -328,6 +330,14 @@ CREATE TRIGGER handle_user_profiles_updated_at
 CREATE TRIGGER handle_user_content_interactions_updated_at
   BEFORE UPDATE ON public.user_content_interactions
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- Note: Unique constraints for transcripts and summaries are now built into the table definitions above
+-- Alternative constraints (commented out - use if multi-language or multi-provider support needed):
+-- For multi-language transcript support, replace the UNIQUE(content_id) constraint with:
+-- UNIQUE(content_id, language)
+
+-- For multi-AI provider summary tracking, add ai_provider column and use:
+-- UNIQUE(content_id, ai_provider)
 
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA public TO anon, authenticated;

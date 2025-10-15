@@ -131,17 +131,6 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const { data: existingSummary } = await supabase
-          .from('summaries')
-          .select('id')
-          .eq('content_id', transcript.content.id)
-          .single()
-
-        if (existingSummary) {
-          processed.push({ content_id: transcript.content.id, already_exists: true })
-          continue
-        }
-
         const prompt = await SUMMARIZATION_PROMPT.format({
           creator: transcript.content.creator_username,
           platform: transcript.content.platform,
@@ -165,20 +154,24 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        const { error: insertError } = await supabase
+        // Use UPSERT to handle unique constraint gracefully
+        const { error: upsertError } = await supabase
           .from('summaries')
-          .insert({
+          .upsert({
             content_id: transcript.content.id,
             summary: summaryData.summary,
             key_points: summaryData.key_points || [],
             sentiment: summaryData.sentiment || 'neutral',
             topics: summaryData.topics || [],
             platform: transcript.content.platform
+          }, {
+            onConflict: 'content_id',
+            ignoreDuplicates: false // Update existing record
           })
 
-        if (insertError) {
-          console.error(`Error inserting summary:`, insertError)
-          errors.push({ content_id: transcript.content.id, error: insertError.message })
+        if (upsertError) {
+          console.error(`Error upserting summary:`, upsertError)
+          errors.push({ content_id: transcript.content.id, error: upsertError.message })
         } else {
           processed.push({ content_id: transcript.content.id, summary_generated: true })
         }

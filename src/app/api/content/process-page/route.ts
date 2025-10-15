@@ -186,43 +186,31 @@ async function parallelTranscriptGeneration(supabase: any, contentIds: string[])
         const contentItem = batch[j]
         
         if (result.has_transcript) {
-          // Check if transcript already exists
-          const { data: existingTranscript } = await supabase
+          // Use UPSERT to handle unique constraint gracefully
+          const { data: upsertedTranscript, error: upsertError } = await supabase
             .from('transcripts')
+            .upsert({
+              content_id: contentItem.id,
+              transcript_text: result.transcript,
+              webvtt_data: result.subtitles_webvtt,
+              language: 'en'
+            }, {
+              onConflict: 'content_id',
+              ignoreDuplicates: false // Update existing record
+            })
             .select('id')
-            .eq('content_id', contentItem.id)
             .single()
 
-          if (!existingTranscript) {
-            // Insert new transcript
-            const { data: newTranscript, error: insertError } = await supabase
-              .from('transcripts')
-              .insert({
-                content_id: contentItem.id,
-                transcript_text: result.transcript,
-                webvtt_data: result.subtitles_webvtt,
-                language: 'en'
-              })
-              .select('id')
-              .single()
-
-            if (insertError) {
-              results.push({
-                content_id: contentItem.id,
-                has_transcript: false,
-                error: insertError.message
-              })
-            } else {
-              results.push({
-                content_id: contentItem.id,
-                transcript_id: newTranscript.id,
-                has_transcript: true
-              })
-            }
+          if (upsertError) {
+            results.push({
+              content_id: contentItem.id,
+              has_transcript: false,
+              error: upsertError.message
+            })
           } else {
             results.push({
               content_id: contentItem.id,
-              transcript_id: existingTranscript.id,
+              transcript_id: upsertedTranscript.id,
               has_transcript: true
             })
           }
@@ -269,22 +257,6 @@ async function parallelSummaryGeneration(supabase: any, transcriptIds: string[])
   // Process transcripts sequentially to avoid overwhelming the LLM API
   for (const transcript of transcripts) {
     try {
-      // Check if summary already exists
-      const { data: existingSummary } = await supabase
-        .from('summaries')
-        .select('id')
-        .eq('content_id', transcript.content.id)
-        .single()
-
-      if (existingSummary) {
-        results.push({
-          content_id: transcript.content.id,
-          summary_id: existingSummary.id,
-          summary_generated: false // Already exists
-        })
-        continue
-      }
-
       const prompt = await SUMMARIZATION_PROMPT.format({
         creator: transcript.content.creator_username,
         platform: transcript.content.platform,
@@ -307,29 +279,33 @@ async function parallelSummaryGeneration(supabase: any, transcriptIds: string[])
         }
       }
 
-      const { data: newSummary, error: insertError } = await supabase
+      // Use UPSERT to handle unique constraint gracefully
+      const { data: upsertedSummary, error: upsertError } = await supabase
         .from('summaries')
-        .insert({
+        .upsert({
           content_id: transcript.content.id,
           summary: summaryData.summary,
           key_points: summaryData.key_points || [],
           sentiment: summaryData.sentiment || 'neutral',
           topics: summaryData.topics || [],
           platform: transcript.content.platform
+        }, {
+          onConflict: 'content_id',
+          ignoreDuplicates: false // Update existing record
         })
         .select('id')
         .single()
 
-      if (insertError) {
+      if (upsertError) {
         results.push({
           content_id: transcript.content.id,
           summary_generated: false,
-          error: insertError.message
+          error: upsertError.message
         })
       } else {
         results.push({
           content_id: transcript.content.id,
-          summary_id: newSummary.id,
+          summary_id: upsertedSummary.id,
           summary_generated: true
         })
       }

@@ -154,43 +154,30 @@ export async function POST(request: NextRequest) {
           const contentItem = batch[j]
           
           if (result.has_transcript) {
-            // Check if transcript already exists
-            const { data: existingTranscript } = await supabase
+            // Use UPSERT to handle unique constraint gracefully
+            const { error: upsertError } = await supabase
               .from('transcripts')
-              .select('id')
-              .eq('content_id', contentItem.id)
-              .single()
+              .upsert({
+                content_id: contentItem.id,
+                transcript_text: result.transcript,
+                webvtt_data: result.subtitles_webvtt,
+                language: 'en'
+              }, {
+                onConflict: 'content_id',
+                ignoreDuplicates: false // Update existing record
+              })
 
-            if (!existingTranscript) {
-              // Insert new transcript
-              const { error: insertError } = await supabase
-                .from('transcripts')
-                .insert({
-                  content_id: contentItem.id,
-                  transcript_text: result.transcript,
-                  webvtt_data: result.subtitles_webvtt,
-                  language: 'en'
-                })
-
-              if (insertError) {
-                console.error('Error inserting transcript:', insertError)
-                errors.push({
-                  content_id: contentItem.id,
-                  error: insertError.message
-                })
-              } else {
-                processed.push({
-                  content_id: contentItem.id,
-                  creator: contentItem.creator_username,
-                  has_transcript: true
-                })
-              }
+            if (upsertError) {
+              console.error('Error upserting transcript:', upsertError)
+              errors.push({
+                content_id: contentItem.id,
+                error: upsertError.message
+              })
             } else {
               processed.push({
                 content_id: contentItem.id,
                 creator: contentItem.creator_username,
-                has_transcript: true,
-                already_exists: true
+                has_transcript: true
               })
             }
           } else {
