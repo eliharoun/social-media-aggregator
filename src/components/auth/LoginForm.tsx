@@ -13,8 +13,10 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [resetLoading, setResetLoading] = useState(false)
+  const [resetMessage, setResetMessage] = useState('')
 
-  const { signIn } = useAuth()
+  const { signIn, resetPassword } = useAuth()
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,6 +38,31 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')
       setLoading(false)
+    }
+  }
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Please enter your email address first')
+      return
+    }
+
+    setResetLoading(true)
+    setError('')
+    setResetMessage('')
+
+    try {
+      const { error } = await resetPassword(email)
+      
+      if (error) {
+        setError(error.message)
+      } else {
+        setResetMessage('Password reset email sent! Check your inbox and follow the instructions.')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send reset email')
+    } finally {
+      setResetLoading(false)
     }
   }
 
@@ -100,6 +127,13 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
             </div>
           )}
 
+          {resetMessage && (
+            <div className="bg-green-50 border-2 border-green-200 rounded-lg p-3 text-green-700 text-sm">
+              <p className="font-medium mb-2">Password Reset Sent:</p>
+              <p>{resetMessage}</p>
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={loading}
@@ -108,6 +142,16 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
+
+        <div className="mt-4 text-center">
+          <button
+            onClick={handleForgotPassword}
+            disabled={resetLoading}
+            className="text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {resetLoading ? 'Sending reset email...' : 'Forgot your password?'}
+          </button>
+        </div>
 
         <div className="mt-6 text-center">
           <p className="text-gray-600">
