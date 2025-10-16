@@ -69,8 +69,8 @@ export default function HomePage() {
           </div>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
             <span className="text-red-500 font-semibold">You&apos;re wasting hours</span> scrolling through TikTok, YouTube, and Instagram looking for quality content. 
-            <span className="text-green-600 font-semibold">Get AI-powered summaries</span> of your favorite creators&apos; latest posts and 
-            <span className="text-purple-600 font-semibold">only watch what&apos;s actually worth your time.</span>
+            <span className="text-green-600 font-semibold"> Get AI-powered summaries</span> of your favorite creators&apos; latest posts and 
+            <span className="text-purple-600 font-semibold"> only watch what&apos;s actually worth your time.</span>
           </p>
         </div>
 
