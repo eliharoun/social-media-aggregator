@@ -269,7 +269,9 @@ export default function DashboardPage() {
     }
   }
 
-  const hasMore = feedState.currentPage < feedState.totalPages
+  // Calculate hasMore based on whether there's more content to display
+  // This accounts for both pagination and filtering
+  const hasMore = feedState.currentPage < feedState.totalPages && filteredDisplayedContent.length < filteredAllContent.length
 
   return (
     <Layout>

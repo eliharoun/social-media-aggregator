@@ -197,11 +197,11 @@ export function InfiniteScrollContainer({
         </div>
       )}
 
-      {/* Scroll to top button - only show when scrolled down significantly */}
+      {/* Scroll to top button - positioned above bottom nav */}
       {typeof window !== 'undefined' && window.scrollY > 400 && (
         <button
           onClick={scrollToTop}
-          className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full shadow-lg transition-all duration-300 flex items-center justify-center hover:scale-110"
+          className="fixed bottom-20 right-4 z-40 w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full shadow-lg transition-all duration-300 flex items-center justify-center hover:scale-110"
           aria-label="Scroll to top"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -22,13 +22,44 @@ export function useInfiniteScroll({
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
   const lastScrollY = useRef(0)
   const hasTriggeredLoad = useRef(false)
+  const checkIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  const handleScroll = useCallback(() => {
+  const checkScrollPosition = useCallback(() => {
     if (isLoading || !hasMore) return
     
     const currentScrollY = window.scrollY
     const scrollDirection = currentScrollY < lastScrollY.current ? 'up' : 'down'
     lastScrollY.current = currentScrollY
+    
+    // More aggressive threshold for mobile
+    const windowHeight = window.innerHeight
+    const documentHeight = document.documentElement.scrollHeight
+    const nearBottom = currentScrollY + windowHeight >= documentHeight - threshold
+    
+    setIsNearBottom(nearBottom)
+    
+    // Trigger load more when scrolling down and near bottom
+    if (nearBottom && scrollDirection === 'down' && !hasTriggeredLoad.current) {
+      console.log('Triggering loadMore from scroll detection', {
+        currentScrollY,
+        windowHeight,
+        documentHeight,
+        threshold,
+        nearBottom
+      })
+      
+      hasTriggeredLoad.current = true
+      onLoadMore()
+      
+      // Reset trigger after a delay to prevent multiple rapid calls
+      setTimeout(() => {
+        hasTriggeredLoad.current = false
+      }, 1000)
+    }
+  }, [threshold, onLoadMore, isLoading, hasMore])
+
+  const handleScroll = useCallback(() => {
+    if (isLoading || !hasMore) return
     
     // Clear existing debounce
     if (debounceRef.current) {
@@ -36,39 +67,36 @@ export function useInfiniteScroll({
     }
     
     // Debounce scroll handling for better performance
-    debounceRef.current = setTimeout(() => {
-      // Standard infinite scroll: load more when scrolling down and near bottom
-      const windowHeight = window.innerHeight
-      const documentHeight = document.documentElement.scrollHeight
-      const nearBottom = currentScrollY + windowHeight >= documentHeight - threshold
-      
-      setIsNearBottom(nearBottom)
-      
-      // Trigger load more when scrolling down and near bottom
-      if (nearBottom && scrollDirection === 'down' && !hasTriggeredLoad.current) {
-        hasTriggeredLoad.current = true
-        onLoadMore()
-        
-        // Reset trigger after a delay to prevent multiple rapid calls
-        setTimeout(() => {
-          hasTriggeredLoad.current = false
-        }, 1000)
-      }
-    }, debounceMs)
-  }, [threshold, onLoadMore, isLoading, hasMore, debounceMs])
+    debounceRef.current = setTimeout(checkScrollPosition, debounceMs)
+  }, [checkScrollPosition, debounceMs, isLoading, hasMore])
 
   useEffect(() => {
-    // Add scroll listener with passive option for better performance
+    // Add multiple event listeners for better mobile compatibility
     window.addEventListener('scroll', handleScroll, { passive: true })
+    window.addEventListener('touchend', handleScroll, { passive: true })
+    window.addEventListener('touchmove', handleScroll, { passive: true })
+    
+    // Also add a periodic check for mobile browsers that might not fire scroll events consistently
+    checkIntervalRef.current = setInterval(() => {
+      if (!isLoading && hasMore) {
+        checkScrollPosition()
+      }
+    }, 500) // Check every 500ms when not loading
     
     // Cleanup
     return () => {
       window.removeEventListener('scroll', handleScroll)
+      window.removeEventListener('touchend', handleScroll)
+      window.removeEventListener('touchmove', handleScroll)
+      
       if (debounceRef.current) {
         clearTimeout(debounceRef.current)
       }
+      if (checkIntervalRef.current) {
+        clearInterval(checkIntervalRef.current)
+      }
     }
-  }, [handleScroll])
+  }, [handleScroll, checkScrollPosition, isLoading, hasMore])
 
   const scrollToTop = useCallback(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
