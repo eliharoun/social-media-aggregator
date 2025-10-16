@@ -119,6 +119,17 @@ export class JobProcessor {
     const { creator } = job.job_data
     if (!creator) throw new Error('Creator data missing from job')
 
+    // Get user settings for date range and content limits
+    const { data: settings } = await this.supabase
+      .from('user_settings')
+      .select('tiktok_date_range_days, youtube_date_range_days, instagram_date_range_days, max_content_per_creator')
+      .eq('user_id', job.user_id)
+      .single()
+
+    // Get platform-specific settings
+    const dateRangeDays = this.getDateRangeForPlatform(creator.platform, settings)
+    const maxContent = Math.min(settings?.max_content_per_creator || 10, 20) // Limit to 20 for performance
+
     let videos: VideoContent[] = []
 
     // Fetch videos based on platform
@@ -126,7 +137,7 @@ export class JobProcessor {
       videos = await this.fetchTikTokVideosWithTimeout(
         creator.username, 
         creator.platform_user_id, 
-        10, // max content per creator
+        maxContent,
         5000 // 5 second timeout
       )
     } else if (creator.platform === 'youtube') {
@@ -134,15 +145,25 @@ export class JobProcessor {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (creator as any).channel_id || creator.platform_user_id, // Use channel_id
         creator.username,
-        10, // max content per creator
+        maxContent,
         5000 // 5 second timeout
       )
     } else {
       throw new Error(`Unsupported platform: ${creator.platform}`)
     }
 
+    // Filter videos by date range
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - dateRangeDays)
+    
+    const recentVideos = videos.filter(video => 
+      new Date(video.created_at) >= cutoffDate
+    )
+
+    console.log(`Filtered ${videos.length} videos to ${recentVideos.length} within ${dateRangeDays} days for ${creator.username}`)
+
     // Cache videos in database
-    const cachedVideos = await this.cacheVideosToDatabase(videos, job.user_id)
+    const cachedVideos = await this.cacheVideosToDatabase(recentVideos, job.user_id)
 
     // Queue transcript jobs for new content with priority based on video length
     for (const video of cachedVideos) {
@@ -291,6 +312,21 @@ export class JobProcessor {
 
     if (summaryError) {
       throw new Error(`Failed to store summary: ${summaryError.message}`)
+    }
+  }
+
+  // Helper method to get date range for specific platform
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private getDateRangeForPlatform(platform: string, settings: any): number {
+    switch (platform) {
+      case 'tiktok':
+        return settings?.tiktok_date_range_days || 7
+      case 'youtube':
+        return settings?.youtube_date_range_days || 7
+      case 'instagram':
+        return settings?.instagram_date_range_days || 7
+      default:
+        return 7 // Default to 7 days
     }
   }
 
