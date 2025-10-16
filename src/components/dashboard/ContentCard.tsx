@@ -185,6 +185,39 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
     }
   }
 
+  const shareTranscript = async () => {
+    if (!transcript) return
+
+    // Create the full text content with transcript and URL
+    const fullContent = `${content.title || 'Untitled'}
+By @${content.creator_username} on ${config.name}
+
+--- TRANSCRIPT ---
+${transcript.transcript_text}
+
+--- ORIGINAL POST ---
+${content.content_url}`
+
+    // Try native share first, but always include the full content
+    if (navigator.share) {
+      try {
+        // Some platforms don't handle the text field well, so put everything in text
+        await navigator.share({
+          title: `Transcript: ${content.title || 'Content'} by @${content.creator_username}`,
+          text: fullContent
+        })
+      } catch (error) {
+        // If native share fails, fall back to clipboard
+        await navigator.clipboard.writeText(fullContent)
+        alert('Transcript and post link copied to clipboard!')
+      }
+    } else {
+      // Clipboard fallback
+      await navigator.clipboard.writeText(fullContent)
+      alert('Transcript and post link copied to clipboard!')
+    }
+  }
+
   const platformConfig = {
     tiktok: { 
       name: 'TikTok', 
@@ -564,7 +597,7 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
 
             <div className="flex gap-3 pt-4 border-t border-gray-200">
               <button
-                onClick={shareContent}
+                onClick={shareTranscript}
                 className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
