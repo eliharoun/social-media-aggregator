@@ -19,15 +19,19 @@
 The Social Media Aggregator is an AI-powered Progressive Web Application (PWA) that aggregates content from multiple social media platforms (TikTok, YouTube, Instagram) and provides intelligent summarization and transcription services. The application allows users to follow their favorite creators, automatically fetch their latest content, and receive AI-generated summaries and transcripts for efficient content consumption.
 
 ### Key Features
-- **Multi-Platform Content Aggregation**: Currently supports TikTok with YouTube and Instagram infrastructure ready
+- **Multi-Platform Content Aggregation**: Supports TikTok and YouTube (active), Instagram infrastructure ready
 - **AI-Powered Summarization**: Uses OpenAI GPT-4o-mini and Anthropic Claude for intelligent content analysis
-- **Automatic Transcription**: Converts video content to searchable text
+- **Automatic Transcription**: Converts video content to searchable text with 4-tier fallback system
 - **Progressive Web App**: Installable on mobile and desktop devices
 - **Real-time Processing**: Live AI processing with visual feedback and queue-based architecture
 - **User Management**: Complete authentication and profile management
-- **Advanced Filtering**: Sort, filter, and organize content efficiently
+- **Advanced Filtering**: Mobile-optimized horizontal scrollable filters with platform-specific sorting
 - **Database-Based Queue System**: Scalable background processing with 3x performance improvement
 - **Intelligent Thumbnail Fallback**: Handles expired URLs with creator avatars and platform logos
+- **YouTube Integration**: Full support for YouTube creators with channel validation and long-form content handling
+- **Robust Transcript Generation**: 4-tier fallback system with native captions and Supadata AI integration
+- **Dynamic Timeout Handling**: Intelligent timeout scaling based on content length (12-20 seconds for YouTube)
+- **Mobile UX Optimization**: Enhanced infinite scroll, touch events, and pull-to-refresh functionality
 
 ## Technology Stack
 
@@ -56,8 +60,9 @@ The Social Media Aggregator is an AI-powered Progressive Web Application (PWA) t
 
 ### External APIs
 - **TikTok**: RapidAPI TikTok API (multiple keys for redundancy)
-- **Transcription**: Multiple transcript API services
-- **YouTube**: Infrastructure ready (API integration pending)
+- **YouTube**: YouTube138 RapidAPI for channel and video data (active)
+- **Transcription**: Multiple transcript API services + Supadata AI
+- **Supadata AI**: Professional AI transcription service (3 API keys for redundancy)
 - **Instagram**: Infrastructure ready (API integration pending)
 
 ### Development Tools
@@ -1255,7 +1260,64 @@ Visual feedback for AI processing operations with real-time updates.
 - `src/components/dashboard/ProcessingIndicator.tsx` - Visual indicators
 - `src/hooks/useContentProcessing.ts` - Processing state management
 
-### 7. User Account Management
+### 7. YouTube Integration
+
+**Feature Description:**
+Complete YouTube creator support with channel validation and long-form content handling.
+
+**User-Facing Functionality:**
+- Add YouTube creators by channel username (requires @ symbol)
+- Automatic channel validation and metadata fetching
+- Long-form video content support with configurable length limits
+- Platform-specific terminology (subscribers vs followers)
+- YouTube-optimized settings and preferences
+
+**Technical Implementation:**
+- YouTube138 RapidAPI integration for channel and video data
+- Channel ID storage for efficient API calls
+- Dynamic timeout handling for long-form content (12-20 seconds)
+- 4-tier transcript fallback system with Supadata AI
+- Priority-based processing for longer videos
+- Transcript truncation for very long content (15,000 character limit)
+
+**Related Files:**
+- `src/app/api/creators/add/route.ts` - YouTube creator validation
+- `src/lib/jobProcessor.ts` - YouTube content processing
+- `src/components/creators/AddCreatorForm.tsx` - YouTube platform support
+- `src/app/settings/page.tsx` - YouTube-specific settings
+
+**Data Models:**
+- `favorite_creators` table with `channel_id` field for YouTube
+- `user_settings` table with `youtube_max_video_length_minutes` setting
+
+### 8. 4-Tier Transcript Generation System
+
+**Feature Description:**
+Robust transcript generation with multiple fallback methods for maximum reliability.
+
+**User-Facing Functionality:**
+- Automatic transcript generation for all video content
+- High success rate through multiple fallback methods
+- Support for multiple languages and formats
+- Graceful handling of transcript failures
+
+**Technical Implementation:**
+- **Tier 1**: youtube-captions-scraper NPM package for native YouTube captions
+- **Tier 2**: Supadata AI with primary API key
+- **Tier 3**: Supadata AI with secondary API key  
+- **Tier 4**: Supadata AI with tertiary API key
+- Automatic fallback progression on failures
+- Dynamic timeout scaling based on content length
+- Error logging and retry mechanisms
+
+**Related Files:**
+- `src/lib/jobProcessor.ts` - Transcript generation logic
+- `src/app/api/transcripts/generate/route.ts` - Transcript API endpoint
+
+**Data Models:**
+- `transcripts` table - Generated transcripts with source tracking
+
+### 9. User Account Management
 
 **Feature Description:**
 Complete user authentication and profile management system.
@@ -1694,6 +1756,11 @@ RAPIDAPI_KEY_1=your_rapidapi_key_1
 RAPIDAPI_KEY_2=your_rapidapi_key_2
 RAPIDAPI_KEY_3=your_rapidapi_key_3
 
+# YouTube APIs (Same RapidAPI account as TikTok)
+YOUTUBE_RAPIDAPI_KEY_1=your_rapidapi_key_1
+YOUTUBE_RAPIDAPI_KEY_2=your_rapidapi_key_2
+YOUTUBE_RAPIDAPI_KEY_3=your_rapidapi_key_3
+
 # Transcript Services
 TRANSCRIPT_API_KEY_1=your_transcript_api_key_1
 TRANSCRIPT_API_KEY_2=your_transcript_api_key_2
@@ -1702,6 +1769,11 @@ TRANSCRIPT_API_KEY_2=your_transcript_api_key_2
 OPENAI_API_KEY=your_openai_api_key
 ANTHROPIC_API_KEY=your_anthropic_api_key
 DEFAULT_LLM_PROVIDER=openai
+
+# Supadata AI (YouTube transcript fallback - Multiple keys for redundancy)
+SUPADATA_API_KEY_1=your_supadata_api_key_1
+SUPADATA_API_KEY_2=your_supadata_api_key_2
+SUPADATA_API_KEY_3=your_supadata_api_key_3
 
 # Queue Processing (Required for background workers)
 NEXT_PUBLIC_APP_URL=http://localhost:3000

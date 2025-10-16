@@ -18,15 +18,17 @@
 
 - 🤖 **AI-Powered Summaries** - Intelligent content analysis using OpenAI and Anthropic
 - 📱 **Mobile-First PWA** - Install as a native app on any device
-- 🎯 **Multi-Platform** - TikTok (active), YouTube & Instagram (coming soon)
-- 🔍 **Advanced Filtering** - Sort, filter, and organize content efficiently
-- 📝 **Smart Transcription** - Searchable text from video content
-- 🎨 **Modern UI** - Clean, responsive design with collapsible interface
-- 🔒 **Privacy-Focused** - Secure data storage with end-to-end encryption
-- ⚡ **Performance Optimized** - Fast loading with smart caching
-- 🚀 **Database-Based Queue System** - Scalable background processing with 3x performance improvement
+- 🎯 **Multi-Platform Support** - TikTok and YouTube (active), Instagram (infrastructure ready)
+- 🔍 **Advanced Filtering** - Mobile-optimized horizontal scrollable filters with platform-specific sorting
+- 📝 **4-Tier Transcript System** - Native captions + Supadata AI with multiple fallback methods
+- 🎨 **Modern UI** - Clean, responsive design with enhanced mobile UX
+- 🔒 **Privacy-Focused** - Secure data storage with Row Level Security
+- ⚡ **Performance Optimized** - 3x faster AI processing with parallel job execution
+- 🚀 **Database-Based Queue System** - Scalable background processing eliminating timeout issues
 - 📊 **Real-Time Progress Tracking** - Visual feedback with phase-based progress indicators
-- 🖼️ **Intelligent Thumbnail Fallback** - Handles expired URLs with creator avatars
+- 🖼️ **Intelligent Thumbnail Fallback** - Handles expired URLs with creator avatars and platform logos
+- 🎬 **YouTube Integration** - Full support for long-form content with dynamic timeout handling
+- 📱 **Enhanced Mobile Experience** - Touch-optimized infinite scroll and pull-to-refresh
 
 ## 📱 Progressive Web App
 
@@ -115,6 +117,11 @@ RAPIDAPI_KEY_1=your_rapidapi_key_1
 RAPIDAPI_KEY_2=your_rapidapi_key_2
 RAPIDAPI_KEY_3=your_rapidapi_key_3
 
+# YouTube APIs (Same RapidAPI account as TikTok)
+YOUTUBE_RAPIDAPI_KEY_1=your_rapidapi_key_1
+YOUTUBE_RAPIDAPI_KEY_2=your_rapidapi_key_2
+YOUTUBE_RAPIDAPI_KEY_3=your_rapidapi_key_3
+
 # Transcript Services
 TRANSCRIPT_API_KEY_1=your_transcript_api_key_1
 TRANSCRIPT_API_KEY_2=your_transcript_api_key_2
@@ -123,6 +130,11 @@ TRANSCRIPT_API_KEY_2=your_transcript_api_key_2
 OPENAI_API_KEY=your_openai_api_key
 ANTHROPIC_API_KEY=your_anthropic_api_key
 DEFAULT_LLM_PROVIDER=openai
+
+# Supadata AI (YouTube transcript fallback - Multiple keys for redundancy)
+SUPADATA_API_KEY_1=your_supadata_api_key_1
+SUPADATA_API_KEY_2=your_supadata_api_key_2
+SUPADATA_API_KEY_3=your_supadata_api_key_3
 
 # Queue Processing (Required for background workers)
 NEXT_PUBLIC_APP_URL=http://localhost:3000
@@ -158,27 +170,31 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 ## 📖 Usage Guide
 
 ### 1. Add Creators
-Navigate to the **Creators** tab and add your favorite TikTok creators by username.
+Navigate to the **Creators** tab and add your favorite creators:
+- **TikTok**: Add by username (e.g., `@creator123`)
+- **YouTube**: Add by channel username with @ symbol (e.g., `@channelname`)
 
 ### 2. Refresh Content
-Go to the **Dashboard** and click the refresh button to fetch the latest content.
+Go to the **Dashboard** and click the refresh button to fetch the latest content from all platforms.
 
 ### 3. AI Processing
-The app automatically:
-- Generates transcripts from videos
-- Creates intelligent summaries
-- Extracts key points and topics
-- Analyzes sentiment
+The app automatically processes content with:
+- **4-Tier Transcript Generation**: Native captions → Supadata AI (3 fallback keys)
+- **Intelligent Summaries**: Key points, sentiment analysis, and topic extraction
+- **Dynamic Timeout Handling**: 12-20 seconds for long-form YouTube content
+- **Parallel Processing**: 3x faster AI operations
 
 ### 4. Organize Content
-Use the collapsible filter controls to:
-- Filter by platform
+Use the mobile-optimized horizontal scrollable filters to:
+- Filter by platform (TikTok, YouTube)
 - Sort by date or engagement
 - Hide already-read content
+- Platform-specific sorting options
 
 ### 5. Manage Account
 In the **Account** tab:
 - Update your profile information
+- Configure platform-specific settings
 - Change your password
 - Sign out or delete account
 
@@ -208,8 +224,8 @@ In the **Account** tab:
 
 | Platform | Status | Features |
 |----------|--------|----------|
-| **TikTok** | ✅ Active | Content fetching, transcripts, summaries |
-| **YouTube** | 🔄 Coming Soon | Infrastructure ready |
+| **TikTok** | ✅ Active | Content fetching, AI transcripts, intelligent summaries |
+| **YouTube** | ✅ Active | Channel validation, long-form content, 4-tier transcript system |
 | **Instagram** | 🔄 Coming Soon | Infrastructure ready |
 
 ### AI Providers
@@ -289,13 +305,20 @@ The architecture supports easy platform addition:
 
 ## 📝 Changelog
 
-### v0.1.0 (Current)
+### v0.2.0 (Current)
+- ✅ **YouTube Integration** - Full support for YouTube creators with channel validation
+- ✅ **4-Tier Transcript System** - Native captions + Supadata AI with 3 fallback keys
+- ✅ **Dynamic Timeout Handling** - Intelligent scaling for long-form content (12-20 seconds)
+- ✅ **Mobile UX Enhancements** - Horizontal scrollable filters and enhanced infinite scroll
+- ✅ **Transcript Sharing** - Complete transcript sharing with post links
+- ✅ **Platform-Specific Features** - Subscribers vs followers, @ symbol handling
+
+### v0.1.0
 - ✅ TikTok content aggregation
 - ✅ AI-powered summarization with fallback providers
 - ✅ Mobile-first PWA design
 - ✅ Account management system
 - ✅ Advanced filtering and sorting
-- ✅ Collapsible interface design
 - ✅ Database-based queue system for scalable processing
 - ✅ Real-time progress tracking with visual indicators
 - ✅ Parallel AI processing (3x performance improvement)
@@ -304,14 +327,14 @@ The architecture supports easy platform addition:
 
 ## 🔮 Roadmap
 
-- [ ] YouTube integration
 - [ ] Instagram integration
-- [ ] Push notifications
 - [ ] Advanced search functionality
 - [ ] Content analytics dashboard
 - [ ] Social sharing features
 - [ ] Offline content caching
 - [ ] Multi-language support
+- [ ] Content recommendation engine
+- [ ] Advanced transcript search
 
 ## 📄 License
 

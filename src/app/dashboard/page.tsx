@@ -225,19 +225,7 @@ export default function DashboardPage() {
 
 
   const loadNextPage = async () => {
-    console.log('loadNextPage called', { 
-      isLoadingMore: feedState.isLoadingMore, 
-      currentPage: feedState.currentPage, 
-      totalPages: feedState.totalPages,
-      hasMore: feedState.currentPage < feedState.totalPages
-    })
-    
     if (feedState.isLoadingMore || feedState.currentPage >= feedState.totalPages) {
-      console.log('loadNextPage blocked:', { 
-        isLoadingMore: feedState.isLoadingMore, 
-        currentPage: feedState.currentPage, 
-        totalPages: feedState.totalPages 
-      })
       return
     }
 
@@ -287,7 +275,7 @@ export default function DashboardPage() {
             )}
             {isProcessing && !feedState.isRefreshing && (
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-purple-700 text-sm text-center">
-                🤖 Processing AI summaries for current page...
+                📝 Processing summaries for current page...
               </div>
             )}
           </div>

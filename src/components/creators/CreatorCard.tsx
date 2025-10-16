@@ -101,10 +101,13 @@ export function CreatorCard({ creator, onRemove, loading }: CreatorCardProps) {
               <p className="text-gray-600 text-sm mb-2">@{creator.username}</p>
             )}
 
-            {/* Only show follower count if we have valid data (> 0) */}
+            {/* Show subscriber count for YouTube, follower count for others */}
             {creator.follower_count && creator.follower_count > 0 && (
               <p className="text-gray-500 text-sm">
-                {formatNumber(creator.follower_count)} followers
+                {creator.platform === 'youtube' 
+                  ? `${formatNumber(creator.follower_count)} subscribers`
+                  : `${formatNumber(creator.follower_count)} followers`
+                }
               </p>
             )}
 

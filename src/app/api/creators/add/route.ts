@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
+interface CreatorInfo {
+  platform_user_id: string
+  display_name: string
+  avatar_url: string | null
+  follower_count: number | null
+  channel_id?: string // YouTube-specific field
+}
+
 // TikTok API configuration (from existing proof of concept)
 const RAPIDAPI_KEYS = [
   process.env.RAPIDAPI_KEY_1!,
@@ -8,7 +16,14 @@ const RAPIDAPI_KEYS = [
   process.env.RAPIDAPI_KEY_3!,
 ]
 
-async function validateTikTokCreator(username: string) {
+// YouTube API configuration (same RapidAPI account)
+const YOUTUBE_RAPIDAPI_KEYS = [
+  process.env.YOUTUBE_RAPIDAPI_KEY_1!,
+  process.env.YOUTUBE_RAPIDAPI_KEY_2!,
+  process.env.YOUTUBE_RAPIDAPI_KEY_3!,
+]
+
+async function validateTikTokCreator(username: string): Promise<CreatorInfo> {
   for (let i = 0; i < RAPIDAPI_KEYS.length; i++) {
     try {
       const response = await fetch(
@@ -48,18 +63,41 @@ async function validateTikTokCreator(username: string) {
   throw new Error('Creator not found or API unavailable')
 }
 
-async function validateYouTubeCreator(username: string) {
-  // Placeholder for YouTube API integration
-  // Will be implemented when YouTube API key is available
-  return {
-    platform_user_id: username,
-    display_name: username,
-    avatar_url: null,
-    follower_count: null
+async function validateYouTubeCreator(username: string): Promise<CreatorInfo> {
+  for (let i = 0; i < YOUTUBE_RAPIDAPI_KEYS.length; i++) {
+    try {
+      const response = await fetch(
+        `https://youtube138.p.rapidapi.com/channel/details/?id=${encodeURIComponent(username)}&hl=en&gl=US`,
+        {
+          headers: {
+            'x-rapidapi-key': YOUTUBE_RAPIDAPI_KEYS[i],
+            'x-rapidapi-host': 'youtube138.p.rapidapi.com'
+          }
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        
+        if (data.channelId) {
+          return {
+            platform_user_id: data.channelId,
+            display_name: data.title || username,
+            avatar_url: data.avatar?.[0]?.url || null,
+            follower_count: data.stats?.subscribers || null,
+            channel_id: data.channelId // Store for video fetching
+          }
+        }
+      }
+    } catch (error) {
+      continue
+    }
   }
+  
+  throw new Error('YouTube creator not found or API unavailable')
 }
 
-async function validateInstagramCreator(username: string) {
+async function validateInstagramCreator(username: string): Promise<CreatorInfo> {
   // Placeholder for Instagram API integration
   // Will be implemented when Instagram API access is available
   return {
@@ -180,6 +218,10 @@ export async function POST(request: NextRequest) {
             display_name: creatorInfo.display_name,
             avatar_url: creatorInfo.avatar_url,
             follower_count: creatorInfo.follower_count,
+            // YouTube-specific fields
+            ...(platform === 'youtube' && creatorInfo.channel_id && {
+              channel_id: creatorInfo.channel_id
+            })
           })
           .eq('id', existingCreator.id)
           .select()
@@ -207,6 +249,10 @@ export async function POST(request: NextRequest) {
         display_name: creatorInfo.display_name,
         avatar_url: creatorInfo.avatar_url,
         follower_count: creatorInfo.follower_count,
+        // YouTube-specific fields
+        ...(platform === 'youtube' && creatorInfo.channel_id && {
+          channel_id: creatorInfo.channel_id
+        })
       })
       .select()
       .single()

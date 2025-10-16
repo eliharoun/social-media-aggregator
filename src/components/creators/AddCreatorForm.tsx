@@ -35,8 +35,7 @@ export function AddCreatorForm({ onAdd, loading }: AddCreatorFormProps) {
       ),
       placeholder: '@channelname or channel URL',
       color: 'bg-red-500',
-      enabled: false,
-      comingSoon: true
+      enabled: true
     },
     { 
       id: 'instagram', 
@@ -62,8 +61,18 @@ export function AddCreatorForm({ onAdd, loading }: AddCreatorFormProps) {
       return
     }
 
-    // Clean username (remove @ if present)
-    const cleanUsername = username.replace('@', '').trim()
+    // Clean username based on platform requirements
+    let cleanUsername = username.trim()
+    
+    if (platform === 'youtube') {
+      // YouTube API requires @ symbol for usernames
+      if (!cleanUsername.startsWith('@') && !cleanUsername.includes('youtube.com')) {
+        cleanUsername = `@${cleanUsername}`
+      }
+    } else {
+      // TikTok and Instagram don't need @ symbol
+      cleanUsername = cleanUsername.replace('@', '')
+    }
 
     if (cleanUsername.length < 2) {
       setError('Username must be at least 2 characters')

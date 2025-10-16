@@ -40,14 +40,6 @@ export function useInfiniteScroll({
     
     // Trigger load more when scrolling down and near bottom
     if (nearBottom && scrollDirection === 'down' && !hasTriggeredLoad.current) {
-      console.log('Triggering loadMore from scroll detection', {
-        currentScrollY,
-        windowHeight,
-        documentHeight,
-        threshold,
-        nearBottom
-      })
-      
       hasTriggeredLoad.current = true
       onLoadMore()
       

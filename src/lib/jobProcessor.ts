@@ -11,10 +11,24 @@ const RAPIDAPI_KEYS = [
   process.env.RAPIDAPI_KEY_3!,
 ]
 
+// YouTube API configuration (same RapidAPI account)
+const YOUTUBE_RAPIDAPI_KEYS = [
+  process.env.YOUTUBE_RAPIDAPI_KEY_1!,
+  process.env.YOUTUBE_RAPIDAPI_KEY_2!,
+  process.env.YOUTUBE_RAPIDAPI_KEY_3!,
+]
+
 // Transcript API configuration (reuse existing)
 const TRANSCRIPT_API_KEYS = [
   process.env.TRANSCRIPT_API_KEY_1!,
   process.env.TRANSCRIPT_API_KEY_2!,
+]
+
+// Supadata AI configuration (multiple keys for redundancy)
+const SUPADATA_API_KEYS = [
+  process.env.SUPADATA_API_KEY_1!,
+  process.env.SUPADATA_API_KEY_2!,
+  process.env.SUPADATA_API_KEY_3!,
 ]
 
 // LLM configuration
@@ -105,25 +119,55 @@ export class JobProcessor {
     const { creator } = job.job_data
     if (!creator) throw new Error('Creator data missing from job')
 
-    // Fetch videos with timeout protection
-    const videos = await this.fetchTikTokVideosWithTimeout(
-      creator.username, 
-      creator.platform_user_id, 
-      10, // max content per creator
-      5000 // 5 second timeout
-    )
+    let videos: VideoContent[] = []
+
+    // Fetch videos based on platform
+    if (creator.platform === 'tiktok') {
+      videos = await this.fetchTikTokVideosWithTimeout(
+        creator.username, 
+        creator.platform_user_id, 
+        10, // max content per creator
+        5000 // 5 second timeout
+      )
+    } else if (creator.platform === 'youtube') {
+      videos = await this.fetchYouTubeVideosWithTimeout(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (creator as any).channel_id || creator.platform_user_id, // Use channel_id
+        creator.username,
+        10, // max content per creator
+        5000 // 5 second timeout
+      )
+    } else {
+      throw new Error(`Unsupported platform: ${creator.platform}`)
+    }
 
     // Cache videos in database
     const cachedVideos = await this.cacheVideosToDatabase(videos, job.user_id)
 
-    // Queue transcript jobs for new content
+    // Queue transcript jobs for new content with priority based on video length
     for (const video of cachedVideos) {
       try {
+        // Determine priority based on video length for YouTube videos
+        let priority = 3 // Default priority for transcripts
+        
+        if (video.platform === 'youtube') {
+          // For YouTube, longer videos get lower priority (higher number = lower priority)
+          // Use title length as heuristic for video length
+          const titleLength = video.title?.length || 0
+          if (titleLength > 100) {
+            priority = 7 // Lower priority for potentially longer videos
+          } else if (titleLength > 50) {
+            priority = 5 // Medium priority
+          } else {
+            priority = 3 // Higher priority for shorter videos
+          }
+        }
+
         await this.queueManager.addTranscriptJob(
           job.user_id,
           video.id, // Use database ID from cached content
           video.content_url,
-          3 // Higher priority for transcripts
+          priority
         )
       } catch (error) {
         // Continue with other videos if one fails to queue
@@ -204,8 +248,31 @@ export class JobProcessor {
       throw new Error('Summary data missing from job')
     }
 
-    // Generate AI summary with timeout
-    const summaryData = await this.generateSummaryWithTimeout(transcript_text, content_metadata, 8000)
+    // Determine timeout based on transcript length and platform
+    let timeout = 8000 // Default 8 seconds
+    
+    if (content_metadata.platform === 'youtube') {
+      // YouTube videos need more time for processing
+      const transcriptLength = transcript_text.length
+      if (transcriptLength > 10000) {
+        timeout = 20000 // 20 seconds for very long transcripts
+      } else if (transcriptLength > 5000) {
+        timeout = 15000 // 15 seconds for long transcripts
+      } else {
+        timeout = 12000 // 12 seconds for medium transcripts
+      }
+    }
+
+    // For very long transcripts, chunk them to avoid timeouts
+    let processedTranscript = transcript_text
+    if (transcript_text.length > 15000) {
+      // Truncate very long transcripts to first 15000 characters
+      processedTranscript = transcript_text.substring(0, 15000) + '...'
+      console.log(`Truncated long transcript from ${transcript_text.length} to 15000 characters`)
+    }
+
+    // Generate AI summary with dynamic timeout
+    const summaryData = await this.generateSummaryWithTimeout(processedTranscript, content_metadata, timeout)
     
     // Store summary using UPSERT (already implemented)
     const { error: summaryError } = await this.supabase
@@ -285,6 +352,108 @@ export class JobProcessor {
     throw new Error('Failed to fetch videos from TikTok API')
   }
 
+  // YouTube video fetching methods
+  private async fetchYouTubeVideosWithTimeout(channelId: string, username: string, count: number, timeoutMs: number): Promise<VideoContent[]> {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('YouTube API timeout')), timeoutMs)
+    })
+
+    const fetchPromise = this.fetchYouTubeVideos(channelId, username, count)
+
+    return Promise.race([fetchPromise, timeoutPromise])
+  }
+
+  private async fetchYouTubeVideos(channelId: string, username: string, count = 10): Promise<VideoContent[]> {
+    for (let i = 0; i < YOUTUBE_RAPIDAPI_KEYS.length; i++) {
+      try {
+        const response = await fetch(
+          `https://youtube138.p.rapidapi.com/channel/videos/?id=${channelId}&filter=videos_latest&hl=en&gl=US`,
+          {
+            headers: {
+              'x-rapidapi-key': YOUTUBE_RAPIDAPI_KEYS[i],
+              'x-rapidapi-host': 'youtube138.p.rapidapi.com'
+            }
+          }
+        )
+
+        if (response.ok) {
+          const data = await response.json()
+          const contents = data.contents || []
+          
+          return contents
+            .filter((item: { video?: { lengthSeconds?: number } }) => {
+              // Filter out videos longer than 30 minutes (1800 seconds)
+              const lengthSeconds = item.video?.lengthSeconds || 0
+              return lengthSeconds <= 1800 // 30 minutes limit
+            })
+            .slice(0, count)
+            .map((item: { video: { videoId: string; title?: string; thumbnails?: { url: string }[]; publishedTimeText: string; stats?: { views: number } } }): VideoContent => {
+              const video = item.video
+              return {
+                platform_content_id: video.videoId,
+                platform: 'youtube',
+                creator_username: username,
+                creator_platform: 'youtube',
+                title: video.title || 'Untitled',
+                caption: video.title || '', // YouTube uses title as caption
+                hashtags: this.extractHashtagsFromTitle(video.title || ''),
+                thumbnail_url: video.thumbnails?.[video.thumbnails.length - 1]?.url || '',
+                content_url: `https://www.youtube.com/watch?v=${video.videoId}`,
+                content_type: 'video',
+                created_at: this.parseYouTubeDate(video.publishedTimeText),
+                stats: {
+                  views: video.stats?.views || 0,
+                  likes: 0, // Not available in this API response
+                  comments: 0, // Not available in this API response  
+                  shares: 0 // Not available in this API response
+                }
+              }
+            })
+        }
+      } catch (error) {
+        continue
+      }
+    }
+    
+    throw new Error('Failed to fetch YouTube videos')
+  }
+
+  private parseYouTubeDate(publishedTimeText: string): string {
+    // Parse "13 minutes ago", "3 hours ago", etc. to ISO date
+    const now = new Date()
+    
+    if (publishedTimeText.includes('minute')) {
+      const minutes = parseInt(publishedTimeText.match(/\d+/)?.[0] || '0')
+      return new Date(now.getTime() - minutes * 60 * 1000).toISOString()
+    } else if (publishedTimeText.includes('hour')) {
+      const hours = parseInt(publishedTimeText.match(/\d+/)?.[0] || '0')
+      return new Date(now.getTime() - hours * 60 * 60 * 1000).toISOString()
+    } else if (publishedTimeText.includes('day')) {
+      const days = parseInt(publishedTimeText.match(/\d+/)?.[0] || '0')
+      return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString()
+    }
+    
+    // Handle "X weeks ago", "X months ago", etc.
+    if (publishedTimeText.includes('week')) {
+      const weeks = parseInt(publishedTimeText.match(/\d+/)?.[0] || '0')
+      return new Date(now.getTime() - weeks * 7 * 24 * 60 * 60 * 1000).toISOString()
+    } else if (publishedTimeText.includes('month')) {
+      const months = parseInt(publishedTimeText.match(/\d+/)?.[0] || '0')
+      return new Date(now.getTime() - months * 30 * 24 * 60 * 60 * 1000).toISOString()
+    } else if (publishedTimeText.includes('year')) {
+      const years = parseInt(publishedTimeText.match(/\d+/)?.[0] || '0')
+      return new Date(now.getTime() - years * 365 * 24 * 60 * 60 * 1000).toISOString()
+    }
+    
+    // Fallback to current time
+    return now.toISOString()
+  }
+
+  private extractHashtagsFromTitle(title: string): string[] {
+    const hashtags = title.match(/#[\w]+/g) || []
+    return hashtags.map(tag => tag.substring(1))
+  }
+
   private async generateTranscriptWithTimeout(contentUrl: string, timeoutMs: number): Promise<TranscriptResult> {
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => reject(new Error('Transcript generation timeout')), timeoutMs)
@@ -296,6 +465,12 @@ export class JobProcessor {
   }
 
   private async generateTranscript(contentUrl: string): Promise<TranscriptResult> {
+    // Check if it's a YouTube URL
+    if (contentUrl.includes('youtube.com/watch')) {
+      return this.generateYouTubeTranscript(contentUrl)
+    }
+    
+    // Existing TikTok transcript logic
     for (let i = 0; i < TRANSCRIPT_API_KEYS.length; i++) {
       try {
         const response = await fetch(
@@ -341,6 +516,128 @@ export class JobProcessor {
     throw new Error('Failed to generate transcript from all APIs')
   }
 
+  private async generateYouTubeTranscript(contentUrl: string): Promise<TranscriptResult> {
+    try {
+      // Extract video ID from URL
+      const videoId = contentUrl.match(/[?&]v=([^&]+)/)?.[1]
+      if (!videoId) throw new Error('Invalid YouTube URL')
+
+      // Try primary method: youtube-captions-scraper
+      try {
+        const { getSubtitles } = await import('youtube-captions-scraper')
+        
+        const captions = await getSubtitles({
+          videoID: videoId,
+          lang: 'en'
+        })
+
+        if (captions && captions.length > 0) {
+          const transcript = captions.map(caption => caption.text).join(' ')
+          const webvtt = this.convertToWebVTT(captions)
+          
+          return {
+            transcript,
+            webvtt,
+            has_transcript: !!transcript
+          }
+        }
+      } catch (primaryError) {
+        console.log('Primary transcript method failed, trying fallback:', primaryError)
+      }
+
+      // Fallback method: NoteGPT API
+      try {
+        const transcript = await this.fetchYouTubeTranscriptFallback(videoId)
+        
+        return {
+          transcript,
+          webvtt: '', // NoteGPT doesn't provide WebVTT format
+          has_transcript: !!transcript
+        }
+      } catch (fallbackError) {
+        console.log('Fallback transcript method failed:', fallbackError)
+      }
+      
+      return {
+        transcript: '',
+        webvtt: '',
+        has_transcript: false
+      }
+    } catch (error) {
+      throw new Error(`Failed to get YouTube transcript: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  private async fetchYouTubeTranscriptFallback(videoId: string): Promise<string> {
+    // Cycle through multiple Supadata API keys for better reliability
+    for (let i = 0; i < SUPADATA_API_KEYS.length; i++) {
+      try {
+        // Use Supadata AI for YouTube transcript generation
+        const { Supadata } = await import('@supadata/js')
+        
+        const supadata = new Supadata({
+          apiKey: SUPADATA_API_KEYS[i],
+        })
+
+        const transcriptResult = await supadata.youtube.transcript({
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+          lang: 'en'
+        })
+
+        // Check if we got a transcript directly or a job ID for async processing
+        if ('jobId' in transcriptResult) {
+          // For large files, we get a job ID and need to poll for results
+          // For now, we'll skip async processing to keep it simple
+          throw new Error('Video too large for synchronous processing')
+        } else {
+          // For smaller files, we get the transcript directly
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const result = transcriptResult as any
+          
+          if (result.content && Array.isArray(result.content) && result.content.length > 0) {
+            // Convert transcript content to plain text
+            const transcriptText = result.content
+              .map((chunk: { text: string }) => chunk.text)
+              .join(' ')
+            return transcriptText
+          } else {
+            throw new Error('No transcript content returned from Supadata')
+          }
+        }
+      } catch (error) {
+        console.log(`Supadata API key ${i + 1} failed:`, error instanceof Error ? error.message : 'Unknown error')
+        // Continue to next API key
+        continue
+      }
+    }
+    
+    throw new Error('All Supadata API keys failed')
+  }
+
+  private convertToWebVTT(captions: { start: number; dur: number; text: string }[]): string {
+    let webvtt = 'WEBVTT\n\n'
+    
+    captions.forEach((caption, index) => {
+      const start = this.formatTime(caption.start)
+      const end = this.formatTime(caption.start + caption.dur)
+      
+      webvtt += `${index + 1}\n`
+      webvtt += `${start} --> ${end}\n`
+      webvtt += `${caption.text}\n\n`
+    })
+    
+    return webvtt
+  }
+
+  private formatTime(seconds: number): string {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = Math.floor(seconds % 60)
+    const ms = Math.floor((seconds % 1) * 1000)
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async generateSummaryWithTimeout(transcriptText: string, contentMetadata: any, timeoutMs: number): Promise<SummaryResult> {
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -356,7 +653,38 @@ export class JobProcessor {
   private async generateSummary(transcriptText: string, contentMetadata: any): Promise<SummaryResult> {
     const llm = this.createLLMInstance()
     
-    const SUMMARIZATION_PROMPT = PromptTemplate.fromTemplate(`
+    // Choose prompt based on platform and content length
+    const isLongForm = contentMetadata.platform === 'youtube' && transcriptText.length > 5000
+    const promptTemplate = isLongForm ? this.getLongFormPrompt() : this.getStandardPrompt()
+    
+    const prompt = await promptTemplate.format({
+      creator: contentMetadata.creator_username,
+      platform: contentMetadata.platform,
+      title: contentMetadata.title,
+      caption: contentMetadata.caption,
+      transcript: transcriptText
+    })
+
+    const response = await llm.invoke(prompt)
+    
+    let summaryData: SummaryResult
+    try {
+      summaryData = JSON.parse(response.content as string)
+    } catch {
+      // Fallback if JSON parsing fails
+      summaryData = {
+        summary: (response.content as string).substring(0, 500),
+        key_points: [],
+        sentiment: 'neutral',
+        topics: []
+      }
+    }
+
+    return summaryData
+  }
+
+  private getStandardPrompt(): PromptTemplate {
+    return PromptTemplate.fromTemplate(`
 You are an expert content analyst specializing in social media video transcripts. Your goal is to extract maximum value from transcripts so users can quickly understand the content without watching the video.
 
 ## Content Metadata
@@ -394,31 +722,48 @@ Respond ONLY with valid JSON. No markdown formatting, no code blocks, just raw J
 
 If any section has no relevant information, use an empty array [] or "neutral" for sentiment.
 `)
+  }
 
-    const prompt = await SUMMARIZATION_PROMPT.format({
-      creator: contentMetadata.creator_username,
-      platform: contentMetadata.platform,
-      title: contentMetadata.title,
-      caption: contentMetadata.caption,
-      transcript: transcriptText
-    })
+  private getLongFormPrompt(): PromptTemplate {
+    return PromptTemplate.fromTemplate(`
+You are an expert content analyst specializing in long-form educational and informational video content. Your goal is to create comprehensive summaries that capture the depth and structure of detailed content.
 
-    const response = await llm.invoke(prompt)
-    
-    let summaryData: SummaryResult
-    try {
-      summaryData = JSON.parse(response.content as string)
-    } catch {
-      // Fallback if JSON parsing fails
-      summaryData = {
-        summary: (response.content as string).substring(0, 500),
-        key_points: [],
-        sentiment: 'neutral',
-        topics: []
-      }
-    }
+## Content Metadata
+- Creator: @{creator}
+- Platform: {platform} (Long-form content)
+- Title: {title}
+- Caption: {caption}
 
-    return summaryData
+## Transcript
+{transcript}
+
+## Instructions
+Analyze this long-form transcript and provide a structured summary optimized for educational/informational content:
+
+1. **Summary**: A comprehensive 4-6 sentence overview that captures the main thesis, key arguments, and conclusions. Focus on the educational value and main learning objectives.
+
+2. **Key Points**: Extract 5-10 of the most important insights, organized by importance. Prioritize:
+   - Main concepts and definitions
+   - Step-by-step processes or methodologies
+   - Important data, research findings, or statistics
+   - Practical applications and examples
+   - Conclusions and recommendations
+   - Common misconceptions addressed
+
+3. **Topics/Categories**: List 3-5 main topics or themes, including subtopics where relevant
+
+## Output Format
+Respond ONLY with valid JSON. No markdown formatting, no code blocks, just raw JSON in this exact structure:
+
+{{
+  "summary": "string",
+  "key_points": ["string"],
+  "sentiment": "positive|negative|neutral",
+  "topics": ["string"]
+}}
+
+If any section has no relevant information, use an empty array [] or "neutral" for sentiment.
+`)
   }
 
   private createLLMInstance() {

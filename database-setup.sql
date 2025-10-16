@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.favorite_creators (
   follower_count INTEGER,
   added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   is_active BOOLEAN DEFAULT TRUE,
+  channel_id TEXT, -- YouTube channel ID for API calls
   UNIQUE(user_id, platform, username)
 );
 
@@ -71,6 +72,7 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
   refresh_interval_hours INTEGER DEFAULT 6,
   enabled_platforms TEXT[] DEFAULT ARRAY['tiktok'],
   auto_expand_summaries BOOLEAN DEFAULT FALSE,
+  youtube_max_video_length_minutes INTEGER DEFAULT 30, -- Maximum YouTube video length to process
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
