@@ -101,7 +101,8 @@ export function CreatorCard({ creator, onRemove, loading }: CreatorCardProps) {
               <p className="text-gray-600 text-sm mb-2">@{creator.username}</p>
             )}
 
-            {creator.follower_count && (
+            {/* Only show follower count if we have valid data (> 0) */}
+            {creator.follower_count && creator.follower_count > 0 && (
               <p className="text-gray-500 text-sm">
                 {formatNumber(creator.follower_count)} followers
               </p>

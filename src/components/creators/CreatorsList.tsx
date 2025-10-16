@@ -124,6 +124,7 @@ export function CreatorsList() {
     }
   }
 
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -217,11 +218,7 @@ export function CreatorsList() {
             </h2>
             <button
               type="button"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                fetchCreators(true) // Pass true to indicate this is a refresh
-              }}
+              onClick={() => fetchCreators(true)}
               disabled={actionLoading}
               className="text-sm text-gray-600 hover:text-gray-800 disabled:opacity-50 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
             >

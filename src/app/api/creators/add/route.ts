@@ -30,7 +30,13 @@ async function validateTikTokCreator(username: string) {
             platform_user_id: userInfo.secUid || userInfo.id,
             display_name: userInfo.nickname || userInfo.displayName,
             avatar_url: userInfo.avatarLarger || userInfo.avatarMedium || userInfo.avatar,
-            follower_count: userInfo.stats?.followerCount || 0
+            follower_count: userInfo.stats?.followerCount || 
+                           userInfo.stats?.followersCount || 
+                           userInfo.stats?.fanCount ||
+                           userInfo.followerCount ||
+                           userInfo.followersCount ||
+                           userInfo.fanCount ||
+                           null
           }
         }
       }

@@ -35,12 +35,35 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
   const [showTranscriptModal, setShowTranscriptModal] = useState(false)
   const [isRead, setIsRead] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
+  const [thumbnailError, setThumbnailError] = useState(false)
+  const [creatorData, setCreatorData] = useState<{ avatar_url?: string; display_name?: string } | null>(null)
 
   useEffect(() => {
     fetchSummary()
     fetchTranscript()
     loadUserPreferences()
+    fetchCreatorData()
   }, [content.id])
+
+  const fetchCreatorData = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const { data: creator } = await supabase
+        .from('favorite_creators')
+        .select('avatar_url, display_name')
+        .eq('username', content.creator_username)
+        .eq('platform', content.platform)
+        .maybeSingle()
+
+      if (creator) {
+        setCreatorData(creator)
+      }
+    } catch (err) {
+      // Silently fail
+    }
+  }
 
   // Auto-expand summary when it becomes available (if enabled)
   useEffect(() => {
@@ -242,20 +265,54 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
 
         {/* Content Layout */}
         <div className="flex gap-3 mb-4">
-          {/* Thumbnail */}
-          {content.thumbnail_url && (
-            <div className="flex-shrink-0">
-              <div className="relative w-20 h-28 sm:w-32 sm:h-48 rounded-lg overflow-hidden">
+          {/* Thumbnail with Fallback System */}
+          <div className="flex-shrink-0">
+            <div className="relative w-20 h-28 sm:w-32 sm:h-48 rounded-lg overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200">
+              {content.thumbnail_url && !thumbnailError ? (
                 <Image
                   src={content.thumbnail_url}
                   alt={content.title || 'Content thumbnail'}
                   fill
                   className="object-cover"
                   sizes="(max-width: 640px) 80px, 128px"
+                  onError={() => setThumbnailError(true)}
                 />
-              </div>
+              ) : (
+                // Fallback thumbnail
+                <div className="w-full h-full flex flex-col items-center justify-center p-2">
+                  {/* Try creator avatar first, then platform logo */}
+                  {creatorData?.avatar_url ? (
+                    <div className="relative w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden mb-2">
+                      <Image
+                        src={creatorData.avatar_url}
+                        alt={`${content.creator_username} avatar`}
+                        fill
+                        className="object-cover"
+                        onError={() => setCreatorData(prev => prev ? { ...prev, avatar_url: undefined } : null)}
+                      />
+                    </div>
+                  ) : (
+                    // Platform logo fallback
+                    <div className={`w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center mb-2 ${config.bgColor}`}>
+                      <div className={`text-2xl sm:text-3xl ${config.textColor}`}>
+                        {config.icon}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Creator name */}
+                  <div className="text-center">
+                    <p className="text-[10px] sm:text-xs font-medium text-gray-600 truncate max-w-full">
+                      @{content.creator_username}
+                    </p>
+                    <p className={`text-[9px] sm:text-xs ${config.textColor} font-medium`}>
+                      {config.name}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
           
           <div className="flex-1 min-w-0">
             {/* Title */}

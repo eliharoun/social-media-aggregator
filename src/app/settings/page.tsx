@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Layout } from '@/components/layout/Layout'
+import { QueueProgressIndicator } from '@/components/dashboard/QueueProgressIndicator'
 import { supabase } from '@/lib/supabase'
+import { useQueueProgress } from '@/hooks/useQueueProgress'
 
 interface UserSettings {
   id?: string
@@ -39,6 +41,7 @@ export default function SettingsPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [isGeneratingSummaries, setIsGeneratingSummaries] = useState(false)
   const router = useRouter()
+  const { progress, isActive: isQueueActive, startProgressTracking, stopProgressTracking } = useQueueProgress()
 
   useEffect(() => {
     loadSettings()
@@ -191,26 +194,33 @@ export default function SettingsPage() {
 
       if (response.ok) {
         const result = await response.json()
-        if (result.processed > 0) {
-          setMessage(`Generated ${result.processed} summaries! Refreshing page to show them...`)
-          // Auto-refresh the page after 2 seconds to show new summaries
-          setTimeout(() => {
-            window.location.reload()
-          }, 2000)
+        if (result.jobsQueued > 0) {
+          // Start tracking progress for queue-based processing
+          startProgressTracking()
+          setMessage(`Queued ${result.jobsQueued} summary generation jobs. Processing in background...`)
+          setIsGeneratingSummaries(false) // Stop the button loading state
         } else {
           setMessage('All transcripts already have summaries!')
           setTimeout(() => setMessage(''), 3000)
+          setIsGeneratingSummaries(false)
         }
       } else {
-        setMessage('Failed to generate summaries')
+        setMessage('Failed to queue summary generation')
         setTimeout(() => setMessage(''), 3000)
+        setIsGeneratingSummaries(false)
       }
     } catch (err) {
-      setMessage('Failed to generate summaries')
+      setMessage('Failed to queue summary generation')
       setTimeout(() => setMessage(''), 3000)
-    } finally {
       setIsGeneratingSummaries(false)
     }
+  }
+
+  // Handle queue progress completion for summary generation
+  const handleSummaryProgressComplete = () => {
+    stopProgressTracking()
+    setMessage('🎉 All summaries generated! Go to Dashboard to see them.')
+    setTimeout(() => setMessage(''), 5000)
   }
 
   const platforms = [
@@ -314,6 +324,16 @@ export default function SettingsPage() {
                 </>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Queue Progress Indicator for Summary Generation */}
+        {isQueueActive && progress && (
+          <div className="mb-6">
+            <QueueProgressIndicator 
+              progress={progress} 
+              onComplete={handleSummaryProgressComplete}
+            />
           </div>
         )}
 
@@ -451,46 +471,6 @@ export default function SettingsPage() {
             <h2 className="text-xl font-semibold text-gray-800 mb-6">General Settings</h2>
             
             <div className="space-y-6">
-              {/* Auto Refresh */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-medium text-gray-800">Auto-Refresh Content</h3>
-                  <p className="text-sm text-gray-600">Automatically fetch new content from your favorite creators</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.auto_refresh_enabled}
-                    onChange={(e) => setSettings(prev => ({ ...prev, auto_refresh_enabled: e.target.checked }))}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                </label>
-              </div>
-
-              {/* Refresh Interval */}
-              {settings.auto_refresh_enabled && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Refresh Interval
-                  </label>
-                  <select
-                    value={settings.refresh_interval_hours}
-                    onChange={(e) => setSettings(prev => ({ ...prev, refresh_interval_hours: parseInt(e.target.value) }))}
-                    className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  >
-                    <option value={1}>Every hour</option>
-                    <option value={3}>Every 3 hours</option>
-                    <option value={6}>Every 6 hours</option>
-                    <option value={12}>Every 12 hours</option>
-                    <option value={24}>Once daily</option>
-                  </select>
-                  <p className="text-sm text-gray-600 mt-1">
-                    How often to check for new content automatically
-                  </p>
-                </div>
-              )}
-
               {/* Auto-Expand Summaries */}
               <div className="flex items-center justify-between">
                 <div>

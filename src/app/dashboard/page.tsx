@@ -5,8 +5,10 @@ import Link from 'next/link'
 import { Layout } from '@/components/layout/Layout'
 import { ContentCard } from '@/components/dashboard/ContentCard'
 import { InfiniteScrollContainer } from '@/components/dashboard/InfiniteScrollContainer'
+import { QueueProgressIndicator } from '@/components/dashboard/QueueProgressIndicator'
 import { Content, supabase } from '@/lib/supabase'
 import { useContentProcessing } from '@/hooks/useContentProcessing'
+import { useQueueProgress } from '@/hooks/useQueueProgress'
 
 interface DashboardState {
   allContent: Content[]
@@ -38,6 +40,7 @@ export default function DashboardPage() {
   const [filtersExpanded, setFiltersExpanded] = useState(false)
 
   const { processPage, getStatus, resetStatus, isProcessing } = useContentProcessing()
+  const { progress, isActive: isQueueActive, startProgressTracking, stopProgressTracking } = useQueueProgress()
 
   // Apply filters to content
   const getFilteredContent = (content: Content[]) => {
@@ -138,6 +141,46 @@ export default function DashboardPage() {
     }
   }
 
+  // Load existing content from database
+  const loadExistingContent = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const { data: cachedContent } = await supabase
+        .from('content')
+        .select(`
+          *,
+          transcripts (
+            id,
+            transcript_text,
+            language
+          ),
+          summaries (
+            id,
+            summary,
+            key_points,
+            sentiment,
+            topics
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(50) // Get first 50 items
+
+      if (cachedContent && cachedContent.length > 0) {
+        setFeedState(prev => ({
+          ...prev,
+          allContent: cachedContent,
+          displayedContent: cachedContent.slice(0, 10),
+          currentPage: 1,
+          totalPages: Math.ceil(cachedContent.length / 10)
+        }))
+      }
+    } catch (err) {
+      console.error('Failed to load existing content:', err)
+    }
+  }
+
   useEffect(() => {
     refreshEntireFeed()
   }, [])
@@ -150,7 +193,7 @@ export default function DashboardPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      // Step 1: Fetch all content from all creators
+      // Start queue-based content fetching
       const response = await fetch('/api/content/fetch-all', {
         method: 'POST',
         headers: {
@@ -162,34 +205,65 @@ export default function DashboardPage() {
       if (response.ok) {
         const data = await response.json()
         
-        // Step 2: Update state with complete dataset
-        setFeedState(prev => ({
-          ...prev,
-          allContent: data.allContent || [],
-          displayedContent: data.firstPage || [],
-          currentPage: 1,
-          totalPages: data.totalPages || 0,
-          isRefreshing: false
-        }))
-
-        // Step 3: Auto-process first page
-        if (data.firstPage && data.firstPage.length > 0) {
-          const contentIds = data.firstPage
-            .filter((item: Content) => item.id) // Filter out items without IDs
-            .map((item: Content) => item.id)
+        if (data.sessionId && data.jobsQueued > 0) {
+          // Start tracking progress for queue-based processing
+          startProgressTracking()
           
-          if (contentIds.length > 0) {
-            processPage(contentIds)
-          }
+          // Show immediate feedback - no content yet, but processing started
+          setFeedState(prev => ({ ...prev, isRefreshing: false }))
+        } else {
+          // No jobs queued (no creators or all jobs already exist)
+          // Load existing content from database
+          await loadExistingContent()
+          setFeedState(prev => ({ ...prev, isRefreshing: false }))
         }
       } else {
         const errorText = await response.text()
-        console.error('Failed to fetch content:', response.status, errorText)
+        console.error('Failed to queue content fetching:', response.status, errorText)
         setFeedState(prev => ({ ...prev, isRefreshing: false }))
       }
     } catch (err) {
       console.error('Failed to refresh feed:', err)
       setFeedState(prev => ({ ...prev, isRefreshing: false }))
+    }
+  }
+
+  // Handle queue progress completion
+  const handleProgressComplete = async () => {
+    stopProgressTracking()
+    
+    // Refresh the displayed content from database
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+
+    const { data: cachedContent } = await supabase
+      .from('content')
+      .select(`
+        *,
+        transcripts (
+          id,
+          transcript_text,
+          language
+        ),
+        summaries (
+          id,
+          summary,
+          key_points,
+          sentiment,
+          topics
+        )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(50) // Get first 50 items
+
+    if (cachedContent) {
+      setFeedState(prev => ({
+        ...prev,
+        allContent: cachedContent,
+        displayedContent: cachedContent.slice(0, 10),
+        currentPage: 1,
+        totalPages: Math.ceil(cachedContent.length / 10)
+      }))
     }
   }
 
@@ -252,12 +326,22 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* Processing Status */}
-        {(feedState.isRefreshing || isProcessing) && (
+        {/* Queue Progress Indicator */}
+        {isQueueActive && progress && (
+          <div className="mb-6">
+            <QueueProgressIndicator 
+              progress={progress} 
+              onComplete={handleProgressComplete}
+            />
+          </div>
+        )}
+
+        {/* Legacy Processing Status - keep for backward compatibility */}
+        {(feedState.isRefreshing || isProcessing) && !isQueueActive && (
           <div className="mb-6">
             {feedState.isRefreshing && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-700 text-sm text-center">
-                🔄 Fetching latest content and preparing AI summaries...
+                🔄 Queuing content processing jobs...
               </div>
             )}
             {isProcessing && !feedState.isRefreshing && (

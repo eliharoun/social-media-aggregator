@@ -192,7 +192,6 @@ export function InfiniteScrollContainer({
             </div>
             <div className="text-sm font-medium">
               <div>Scroll up for more</div>
-              <div className="text-xs opacity-80">AI content ready!</div>
             </div>
           </div>
         </div>

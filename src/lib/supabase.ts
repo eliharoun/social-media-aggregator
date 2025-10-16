@@ -88,3 +88,60 @@ export interface UserSettings {
   created_at: string
   updated_at: string
 }
+
+// Queue-related types
+export interface ProcessingJob {
+  id: string
+  user_id: string
+  job_type: 'content_fetch' | 'transcript' | 'summary'
+  job_data: {
+    creator?: {
+      id: string
+      username: string
+      platform: string
+      platform_user_id: string
+    }
+    content_id?: string
+    content_url?: string
+    transcript_id?: string
+    transcript_text?: string
+    content_metadata?: {
+      title: string
+      caption: string
+      platform: string
+      creator_username: string
+    }
+    session_id?: string
+  }
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  priority: number
+  retry_count: number
+  max_retries: number
+  error_message?: string
+  created_at: string
+  started_at?: string
+  completed_at?: string
+}
+
+export interface ProcessingSession {
+  id: string
+  user_id: string
+  session_type: 'content_refresh'
+  total_jobs: number
+  completed_jobs: number
+  failed_jobs: number
+  status: 'active' | 'completed' | 'failed'
+  started_at: string
+  completed_at?: string
+  error_summary?: string[]
+}
+
+export interface QueueProgress {
+  sessionId: string
+  totalJobs: number
+  completedJobs: number
+  failedJobs: number
+  currentPhase: 'fetching' | 'transcribing' | 'summarizing' | 'completed'
+  estimatedTimeRemaining?: number
+  errors: string[]
+}

@@ -331,6 +331,46 @@ CREATE TRIGGER handle_user_content_interactions_updated_at
   BEFORE UPDATE ON public.user_content_interactions
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
+-- Database function for getting pending jobs with proper retry_count comparison
+CREATE OR REPLACE FUNCTION get_pending_jobs(job_type_param TEXT, batch_size_param INTEGER)
+RETURNS TABLE (
+  id UUID,
+  user_id UUID,
+  job_type TEXT,
+  job_data JSONB,
+  status TEXT,
+  priority INTEGER,
+  retry_count INTEGER,
+  max_retries INTEGER,
+  error_message TEXT,
+  created_at TIMESTAMP WITH TIME ZONE,
+  started_at TIMESTAMP WITH TIME ZONE,
+  completed_at TIMESTAMP WITH TIME ZONE
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    pj.id,
+    pj.user_id,
+    pj.job_type,
+    pj.job_data,
+    pj.status,
+    pj.priority,
+    pj.retry_count,
+    pj.max_retries,
+    pj.error_message,
+    pj.created_at,
+    pj.started_at,
+    pj.completed_at
+  FROM processing_jobs pj
+  WHERE pj.job_type = job_type_param
+    AND pj.status = 'pending'
+    AND pj.retry_count < pj.max_retries
+  ORDER BY pj.priority ASC, pj.created_at DESC
+  LIMIT batch_size_param;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Note: Unique constraints for transcripts and summaries are now built into the table definitions above
 -- Alternative constraints (commented out - use if multi-language or multi-provider support needed):
 -- For multi-language transcript support, replace the UNIQUE(content_id) constraint with:
@@ -338,6 +378,75 @@ CREATE TRIGGER handle_user_content_interactions_updated_at
 
 -- For multi-AI provider summary tracking, add ai_provider column and use:
 -- UNIQUE(content_id, ai_provider)
+
+-- Processing Jobs Queue Table
+CREATE TABLE IF NOT EXISTS public.processing_jobs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  job_type TEXT NOT NULL CHECK (job_type IN ('content_fetch', 'transcript', 'summary')),
+  job_data JSONB NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+  priority INTEGER DEFAULT 5, -- 1 = highest priority, 10 = lowest
+  retry_count INTEGER DEFAULT 0,
+  max_retries INTEGER DEFAULT 3,
+  error_message TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  started_at TIMESTAMP WITH TIME ZONE,
+  completed_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Create unique index for preventing duplicate jobs (supports JSON expressions)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_job_per_content 
+ON public.processing_jobs(job_type, user_id, (job_data->>'content_id'))
+WHERE job_data->>'content_id' IS NOT NULL;
+
+-- Create unique index for content_fetch jobs (no content_id for these)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_content_fetch_job 
+ON public.processing_jobs(job_type, user_id, (job_data->'creator'->>'id'))
+WHERE job_type = 'content_fetch';
+
+-- Processing Sessions Table (tracks overall progress for user refresh operations)
+CREATE TABLE IF NOT EXISTS public.processing_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  session_type TEXT NOT NULL CHECK (session_type IN ('content_refresh')),
+  total_jobs INTEGER DEFAULT 0,
+  completed_jobs INTEGER DEFAULT 0,
+  failed_jobs INTEGER DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('active', 'completed', 'failed')),
+  started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  completed_at TIMESTAMP WITH TIME ZONE,
+  error_summary TEXT[]
+);
+
+-- Efficient indexes for job processing
+CREATE INDEX IF NOT EXISTS idx_processing_jobs_queue ON public.processing_jobs(status, priority, created_at);
+CREATE INDEX IF NOT EXISTS idx_processing_jobs_user ON public.processing_jobs(user_id, job_type, status);
+CREATE INDEX IF NOT EXISTS idx_processing_jobs_retry ON public.processing_jobs(status, retry_count, max_retries);
+CREATE INDEX IF NOT EXISTS idx_processing_sessions_user ON public.processing_sessions(user_id, status, started_at);
+
+-- Row Level Security for processing jobs
+CREATE POLICY "Users can view own processing jobs" ON public.processing_jobs
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own processing jobs" ON public.processing_jobs
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own processing jobs" ON public.processing_jobs
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view own processing sessions" ON public.processing_sessions
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own processing sessions" ON public.processing_sessions
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own processing sessions" ON public.processing_sessions
+  FOR UPDATE USING (auth.uid() = user_id);
+
+-- Enable RLS on queue tables
+ALTER TABLE public.processing_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.processing_sessions ENABLE ROW LEVEL SECURITY;
 
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
