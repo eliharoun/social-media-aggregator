@@ -5,10 +5,8 @@ import Link from 'next/link'
 import { Layout } from '@/components/layout/Layout'
 import { ContentCard } from '@/components/dashboard/ContentCard'
 import { InfiniteScrollContainer } from '@/components/dashboard/InfiniteScrollContainer'
-import { QueueProgressIndicator } from '@/components/dashboard/QueueProgressIndicator'
 import { Content, supabase } from '@/lib/supabase'
 import { useContentProcessing } from '@/hooks/useContentProcessing'
-import { useQueueProgress } from '@/hooks/useQueueProgress'
 
 interface DashboardState {
   allContent: Content[]
@@ -40,7 +38,6 @@ export default function DashboardPage() {
   const [filtersExpanded, setFiltersExpanded] = useState(false)
 
   const { processPage, getStatus, resetStatus, isProcessing } = useContentProcessing()
-  const { progress, isActive: isQueueActive, startProgressTracking, stopProgressTracking } = useQueueProgress()
 
   // Apply filters to content
   const getFilteredContent = (content: Content[]) => {
@@ -206,10 +203,8 @@ export default function DashboardPage() {
         const data = await response.json()
         
         if (data.sessionId && data.jobsQueued > 0) {
-          // Start tracking progress for queue-based processing
-          startProgressTracking()
-          
-          // Show immediate feedback - no content yet, but processing started
+          // Load existing content from database while processing happens in background
+          await loadExistingContent()
           setFeedState(prev => ({ ...prev, isRefreshing: false }))
         } else {
           // No jobs queued (no creators or all jobs already exist)
@@ -228,44 +223,6 @@ export default function DashboardPage() {
     }
   }
 
-  // Handle queue progress completion
-  const handleProgressComplete = async () => {
-    stopProgressTracking()
-    
-    // Refresh the displayed content from database
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-
-    const { data: cachedContent } = await supabase
-      .from('content')
-      .select(`
-        *,
-        transcripts (
-          id,
-          transcript_text,
-          language
-        ),
-        summaries (
-          id,
-          summary,
-          key_points,
-          sentiment,
-          topics
-        )
-      `)
-      .order('created_at', { ascending: false })
-      .limit(50) // Get first 50 items
-
-    if (cachedContent) {
-      setFeedState(prev => ({
-        ...prev,
-        allContent: cachedContent,
-        displayedContent: cachedContent.slice(0, 10),
-        currentPage: 1,
-        totalPages: Math.ceil(cachedContent.length / 10)
-      }))
-    }
-  }
 
   const loadNextPage = async () => {
     if (feedState.isLoadingMore || feedState.currentPage >= feedState.totalPages) return
@@ -303,45 +260,13 @@ export default function DashboardPage() {
   return (
     <Layout>
       <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Subtle Refresh Button */}
-        <div className="flex justify-center mb-6">
-          <button
-            onClick={refreshEntireFeed}
-            disabled={feedState.isRefreshing}
-            className="px-4 py-2 bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 text-gray-700 rounded-full text-sm font-medium transition-all flex items-center gap-2 shadow-sm"
-          >
-            {feedState.isRefreshing ? (
-              <>
-                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                <span>Refreshing...</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span>Refresh</span>
-              </>
-            )}
-          </button>
-        </div>
 
-        {/* Queue Progress Indicator */}
-        {isQueueActive && progress && (
-          <div className="mb-6">
-            <QueueProgressIndicator 
-              progress={progress} 
-              onComplete={handleProgressComplete}
-            />
-          </div>
-        )}
-
-        {/* Legacy Processing Status - keep for backward compatibility */}
-        {(feedState.isRefreshing || isProcessing) && !isQueueActive && (
+        {/* Processing Status */}
+        {(feedState.isRefreshing || isProcessing) && (
           <div className="mb-6">
             {feedState.isRefreshing && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-700 text-sm text-center">
-                🔄 Queuing content processing jobs...
+                🔄 Refreshing content from creators...
               </div>
             )}
             {isProcessing && !feedState.isRefreshing && (
