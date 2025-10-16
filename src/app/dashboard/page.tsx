@@ -35,7 +35,7 @@ export default function DashboardPage() {
 
   const [userSettings, setUserSettings] = useState<{ auto_expand_summaries: boolean } | null>(null)
   const [readItems, setReadItems] = useState<string[]>([])
-  const [filtersExpanded, setFiltersExpanded] = useState(false)
+  const [showFiltersModal, setShowFiltersModal] = useState(false)
 
   const { processPage, getStatus, resetStatus, isProcessing } = useContentProcessing()
 
@@ -249,13 +249,6 @@ export default function DashboardPage() {
       const endIndex = startIndex + 10
       const nextPageContent = feedState.allContent.slice(startIndex, endIndex)
 
-      console.log('Loading next page:', { 
-        startIndex, 
-        endIndex, 
-        nextPageContentLength: nextPageContent.length,
-        totalAllContent: feedState.allContent.length
-      })
-
       // Update displayed content
       setFeedState(prev => ({
         ...prev,
@@ -342,108 +335,99 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Collapsible Filter Controls */}
-            <div className="bg-white rounded-xl shadow-md overflow-hidden">
-              {/* Filter Header - Always Visible */}
-              <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-100">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setFiltersExpanded(!filtersExpanded)}
-                    className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
-                  >
-                    <svg 
-                      className={`w-4 h-4 transition-transform ${filtersExpanded ? 'rotate-90' : ''}`} 
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                    <span className="text-sm font-medium">Filters</span>
-                  </button>
-                  
-                  {/* Quick Status Display */}
-                  <div className="text-xs text-gray-500">
-                    {filteredDisplayedContent.length} of {filteredAllContent.length}
-                    {(filters.platform !== 'all' || filters.hideRead) && (
-                      <span className="text-purple-600 ml-1">(filtered)</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Active Filter Indicators */}
-                <div className="flex items-center gap-2">
+            {/* Mobile-Optimized Filter Bar - Horizontal Scroll */}
+            <div className="mb-4">
+              {/* Active Filters Display */}
+              {(filters.platform !== 'all' || filters.sortBy !== 'newest' || filters.hideRead) && (
+                <div className="flex items-center gap-2 mb-3 overflow-x-auto pb-2">
+                  <span className="text-xs text-gray-500 whitespace-nowrap">Active:</span>
                   {filters.platform !== 'all' && (
-                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium whitespace-nowrap">
                       {filters.platform}
                     </span>
                   )}
                   {filters.sortBy !== 'newest' && (
-                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium whitespace-nowrap">
                       {filters.sortBy === 'most_liked' ? 'Most Liked' : 
                        filters.sortBy === 'most_viewed' ? 'Most Viewed' : 
                        filters.sortBy === 'oldest' ? 'Oldest' : filters.sortBy}
                     </span>
                   )}
                   {filters.hideRead && (
-                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium whitespace-nowrap">
                       Hide Read
                     </span>
                   )}
-                </div>
-              </div>
-
-              {/* Expandable Filter Controls */}
-              {filtersExpanded && (
-                <div className="p-3 sm:p-4 animate-slideDown">
-                  <div className="flex flex-wrap gap-2 sm:gap-3">
-                    {/* Platform Filter */}
-                    <select
-                      value={filters.platform}
-                      onChange={(e) => setFilters(prev => ({ ...prev, platform: e.target.value }))}
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
-                    >
-                      <option value="all">All Platforms</option>
-                      <option value="tiktok">TikTok</option>
-                      <option value="youtube">YouTube</option>
-                      <option value="instagram">Instagram</option>
-                    </select>
-
-                    {/* Sort Options */}
-                    <select
-                      value={filters.sortBy}
-                      onChange={(e) => setFilters(prev => ({ ...prev, sortBy: e.target.value }))}
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
-                    >
-                      <option value="newest">Newest</option>
-                      <option value="oldest">Oldest</option>
-                      <option value="most_liked">Most Liked</option>
-                      <option value="most_viewed">Most Viewed</option>
-                    </select>
-
-                    {/* Hide Read Toggle */}
-                    <label className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm cursor-pointer hover:bg-gray-50 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={filters.hideRead}
-                        onChange={(e) => setFilters(prev => ({ ...prev, hideRead: e.target.checked }))}
-                        className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                      />
-                      <span className="text-gray-700">Hide Read</span>
-                    </label>
-
-                    {/* Clear Filters Button */}
-                    {(filters.platform !== 'all' || filters.sortBy !== 'newest' || filters.hideRead) && (
-                      <button
-                        onClick={() => setFilters({ platform: 'all', sortBy: 'newest', hideRead: false })}
-                        className="px-3 py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        Clear All
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    onClick={() => setFilters({ platform: 'all', sortBy: 'newest', hideRead: false })}
+                    className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 whitespace-nowrap"
+                  >
+                    Clear All
+                  </button>
                 </div>
               )}
+
+              {/* Horizontal Filter Buttons */}
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {/* Platform Filter Buttons */}
+                <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                  {['all', 'tiktok', 'youtube', 'instagram'].map((platform) => (
+                    <button
+                      key={platform}
+                      onClick={() => setFilters(prev => ({ ...prev, platform }))}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
+                        filters.platform === platform
+                          ? 'bg-white text-purple-700 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-800'
+                      }`}
+                    >
+                      {platform === 'all' ? 'All' : platform.charAt(0).toUpperCase() + platform.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Sort Filter Buttons */}
+                <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                  {[
+                    { value: 'newest', label: 'New' },
+                    { value: 'oldest', label: 'Old' },
+                    { value: 'most_liked', label: '❤️' },
+                    { value: 'most_viewed', label: '👁️' }
+                  ].map((sort) => (
+                    <button
+                      key={sort.value}
+                      onClick={() => setFilters(prev => ({ ...prev, sortBy: sort.value }))}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
+                        filters.sortBy === sort.value
+                          ? 'bg-white text-blue-700 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-800'
+                      }`}
+                    >
+                      {sort.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Hide Read Toggle Button */}
+                <button
+                  onClick={() => setFilters(prev => ({ ...prev, hideRead: !prev.hideRead }))}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+                    filters.hideRead
+                      ? 'bg-green-500 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  {filters.hideRead ? '✓ Hide Read' : 'Hide Read'}
+                </button>
+              </div>
+
+              {/* Content Count */}
+              <div className="text-xs text-gray-500 mt-2">
+                Showing {filteredDisplayedContent.length} of {filteredAllContent.length} items
+                {(filters.platform !== 'all' || filters.hideRead) && (
+                  <span className="text-purple-600 ml-1">• Filtered</span>
+                )}
+              </div>
             </div>
 
             {/* Infinite Scroll Container */}
