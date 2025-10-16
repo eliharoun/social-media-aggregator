@@ -321,6 +321,7 @@ ${content.content_url}`
                         alt={`${content.creator_username} avatar`}
                         fill
                         className="object-cover"
+                        sizes="(max-width: 640px) 48px, 64px"
                         onError={() => setCreatorData(prev => prev ? { ...prev, avatar_url: undefined } : null)}
                       />
                     </div>
