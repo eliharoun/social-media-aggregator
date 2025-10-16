@@ -225,7 +225,21 @@ export default function DashboardPage() {
 
 
   const loadNextPage = async () => {
-    if (feedState.isLoadingMore || feedState.currentPage >= feedState.totalPages) return
+    console.log('loadNextPage called', { 
+      isLoadingMore: feedState.isLoadingMore, 
+      currentPage: feedState.currentPage, 
+      totalPages: feedState.totalPages,
+      hasMore: feedState.currentPage < feedState.totalPages
+    })
+    
+    if (feedState.isLoadingMore || feedState.currentPage >= feedState.totalPages) {
+      console.log('loadNextPage blocked:', { 
+        isLoadingMore: feedState.isLoadingMore, 
+        currentPage: feedState.currentPage, 
+        totalPages: feedState.totalPages 
+      })
+      return
+    }
 
     setFeedState(prev => ({ ...prev, isLoadingMore: true }))
 
@@ -234,6 +248,13 @@ export default function DashboardPage() {
       const startIndex = feedState.currentPage * 10
       const endIndex = startIndex + 10
       const nextPageContent = feedState.allContent.slice(startIndex, endIndex)
+
+      console.log('Loading next page:', { 
+        startIndex, 
+        endIndex, 
+        nextPageContentLength: nextPageContent.length,
+        totalAllContent: feedState.allContent.length
+      })
 
       // Update displayed content
       setFeedState(prev => ({
