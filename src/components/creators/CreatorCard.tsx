@@ -55,7 +55,8 @@ export function CreatorCard({ creator, onRemove, loading }: CreatorCardProps) {
   }
 
   const handleRemove = async () => {
-    if (window.confirm(`Remove @${creator.username} from ${config.name}?`)) {
+    const displayUsername = creator.username.startsWith('@') ? creator.username : `@${creator.username}`
+    if (window.confirm(`Remove ${displayUsername} from ${config.name}?`)) {
       await onRemove(creator.id)
     }
   }
@@ -90,7 +91,7 @@ export function CreatorCard({ creator, onRemove, loading }: CreatorCardProps) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <h3 className="text-lg font-semibold text-gray-800 truncate">
-                {creator.display_name || `@${creator.username}`}
+                {creator.display_name || (creator.username.startsWith('@') ? creator.username : `@${creator.username}`)}
               </h3>
               <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.bgColor} ${config.textColor}`}>
                 {config.name}
@@ -98,7 +99,9 @@ export function CreatorCard({ creator, onRemove, loading }: CreatorCardProps) {
             </div>
             
             {creator.display_name && (
-              <p className="text-gray-600 text-sm mb-2">@{creator.username}</p>
+              <p className="text-gray-600 text-sm mb-2">
+                {creator.username.startsWith('@') ? creator.username : `@${creator.username}`}
+              </p>
             )}
 
             {/* Show subscriber count for YouTube, follower count for others */}

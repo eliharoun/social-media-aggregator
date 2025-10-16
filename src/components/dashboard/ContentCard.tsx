@@ -167,8 +167,9 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
   }
 
   const shareContent = async () => {
+    const displayUsername = content.creator_username.startsWith('@') ? content.creator_username : `@${content.creator_username}`
     const shareData = {
-      title: `${content.title || 'Content'} by @${content.creator_username}`,
+      title: `${content.title || 'Content'} by ${displayUsername}`,
       text: summary?.summary || content.caption || 'Check out this content!',
       url: content.content_url
     }
@@ -188,9 +189,10 @@ export function ContentCard({ content, processingStatus, autoExpandSummary = fal
   const shareTranscript = async () => {
     if (!transcript) return
 
+    const displayUsername = content.creator_username.startsWith('@') ? content.creator_username : `@${content.creator_username}`
     // Create the full text content with transcript and URL
     const fullContent = `${content.title || 'Untitled'}
-By @${content.creator_username} on ${config.name}
+By ${displayUsername} on ${config.name}
 
 --- TRANSCRIPT ---
 ${transcript.transcript_text}
@@ -203,7 +205,7 @@ ${content.content_url}`
       try {
         // Some platforms don't handle the text field well, so put everything in text
         await navigator.share({
-          title: `Transcript: ${content.title || 'Content'} by @${content.creator_username}`,
+          title: `Transcript: ${content.title || 'Content'} by ${displayUsername}`,
           text: fullContent
         })
       } catch (error) {
@@ -278,7 +280,7 @@ ${content.content_url}`
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <span className="text-base sm:text-lg font-semibold text-gray-800 truncate">
-              @{content.creator_username}
+              {content.creator_username.startsWith('@') ? content.creator_username : `@${content.creator_username}`}
             </span>
             <span className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${config.bgColor} ${config.textColor}`}>
               {config.icon} <span className="hidden sm:inline ml-1">{config.name}</span>
@@ -337,7 +339,7 @@ ${content.content_url}`
                   {/* Creator name */}
                   <div className="text-center">
                     <p className="text-[10px] sm:text-xs font-medium text-gray-600 truncate max-w-full">
-                      @{content.creator_username}
+                      {content.creator_username.startsWith('@') ? content.creator_username : `@${content.creator_username}`}
                     </p>
                     <p className={`text-[9px] sm:text-xs ${config.textColor} font-medium`}>
                       {config.name}
@@ -566,7 +568,7 @@ ${content.content_url}`
       <Modal
         isOpen={showTranscriptModal}
         onClose={() => setShowTranscriptModal(false)}
-        title={`Transcript - @${content.creator_username}`}
+        title={`Transcript - ${content.creator_username.startsWith('@') ? content.creator_username : `@${content.creator_username}`}`}
       >
         {transcript ? (
           <div className="space-y-4">
