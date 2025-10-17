@@ -20,7 +20,7 @@
 - 📱 **Mobile-First PWA** - Install as a native app on any device
 - 🎯 **Multi-Platform Support** - TikTok and YouTube (active), Instagram (infrastructure ready)
 - 🔍 **Advanced Filtering** - Mobile-optimized horizontal scrollable filters with platform-specific sorting
-- 📝 **4-Tier Transcript System** - Native captions + Supadata AI with multiple fallback methods
+- 📝 **Unified Transcript System** - Supadata AI for all platforms with async processing support
 - 🎨 **Modern UI** - Clean, responsive design with enhanced mobile UX
 - 🔒 **Privacy-Focused** - Secure data storage with Row Level Security
 - ⚡ **Performance Optimized** - 3x faster AI processing with parallel job execution
@@ -179,9 +179,10 @@ Go to the **Dashboard** and click the refresh button to fetch the latest content
 
 ### 3. AI Processing
 The app automatically processes content with:
-- **4-Tier Transcript Generation**: Native captions → Supadata AI (3 fallback keys)
+- **Unified Transcript API**: Single Supadata API for all platforms (TikTok, YouTube, Instagram)
+- **Async Processing**: Large videos processed in background with user-initiated completion
+- **Rate Limiting**: 1 request/second with exponential backoff protection
 - **Intelligent Summaries**: Key points, sentiment analysis, and topic extraction
-- **Dynamic Timeout Handling**: 12-20 seconds for long-form YouTube content
 - **Parallel Processing**: 3x faster AI operations
 
 ### 4. Organize Content

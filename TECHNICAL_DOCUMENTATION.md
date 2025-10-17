@@ -61,9 +61,10 @@ The Social Media Aggregator is an AI-powered Progressive Web Application (PWA) t
 ### External APIs
 - **TikTok**: RapidAPI TikTok API (multiple keys for redundancy)
 - **YouTube**: YouTube138 RapidAPI for channel and video data (active)
-- **Transcription**: Multiple transcript API services + Supadata AI
-- **Supadata AI**: Professional AI transcription service (3 API keys for redundancy)
+- **Transcription**: Supadata AI unified transcript API (consolidated)
+- **Supadata AI**: Single transcript API for all platforms (TikTok, YouTube, Instagram)
 - **Instagram**: Infrastructure ready (API integration pending)
+- **Rate Limiting**: 1 request/second with exponential backoff (2s, 4s, 8s)
 
 ### Development Tools
 - **Linting**: ESLint 9 with Next.js config
@@ -357,6 +358,7 @@ erDiagram
 **transcripts**
 - AI-generated transcripts from video content
 - Supports multiple languages and formats (WebVTT)
+- Async processing support with `supadata_job_id` and `processing_status`
 - One-to-one relationship with content
 
 **summaries**
@@ -824,7 +826,7 @@ Real-time progress tracking for user processing sessions.
 
 #### POST /api/transcripts/generate
 
-Generates transcripts for video content.
+Generates transcripts for video content using consolidated Supadata API.
 
 **Request Body:**
 ```json
@@ -844,8 +846,49 @@ Generates transcripts for video content.
     "transcript_text": "string",
     "webvtt_data": "string",
     "language": "en",
+    "supadata_job_id": "string",
+    "processing_status": "completed|pending_async|failed",
     "created_at": "timestamp"
   }
+}
+```
+
+#### POST /api/transcripts/poll-pending
+
+Polls Supadata for async transcript job completion.
+
+**Features:**
+- Rate limited to 1 request/second
+- Processes up to 10 jobs per request
+- 100-second timeout protection
+- Automatic summary job creation on completion
+
+**Request Body:**
+```json
+{}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Processed 3 pending transcripts",
+  "results": [
+    {
+      "content_id": "uuid",
+      "title": "Video Title",
+      "status": "completed|failed|queued|active",
+      "message": "Transcript completed successfully"
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "processed": 3,
+    "completed": 2,
+    "failed": 0,
+    "stillPending": 1
+  },
+  "processingTime": 12000
 }
 ```
 
@@ -1290,32 +1333,38 @@ Complete YouTube creator support with channel validation and long-form content h
 - `favorite_creators` table with `channel_id` field for YouTube
 - `user_settings` table with `youtube_max_video_length_minutes` setting
 
-### 8. 4-Tier Transcript Generation System
+### 8. Consolidated Supadata Transcript System
 
 **Feature Description:**
-Robust transcript generation with multiple fallback methods for maximum reliability.
+Unified transcript generation using single Supadata API for all platforms with async processing support.
 
 **User-Facing Functionality:**
-- Automatic transcript generation for all video content
-- High success rate through multiple fallback methods
-- Support for multiple languages and formats
-- Graceful handling of transcript failures
+- Automatic transcript generation for TikTok, YouTube, and Instagram
+- Immediate processing for most videos (90%+)
+- Async processing for large videos with user-initiated completion
+- "Process Pending Transcripts" feature in Settings
 
 **Technical Implementation:**
-- **Tier 1**: youtube-captions-scraper NPM package for native YouTube captions
-- **Tier 2**: Supadata AI with primary API key
-- **Tier 3**: Supadata AI with secondary API key  
-- **Tier 4**: Supadata AI with tertiary API key
-- Automatic fallback progression on failures
-- Dynamic timeout scaling based on content length
-- Error logging and retry mechanisms
+- **Single API**: `supadata.transcript()` with `mode: 'auto'` for all platforms
+- **Rate Limiting**: 1 request/second with 1.2s delays and exponential backoff
+- **Async Handling**: Job ID storage for large files requiring background processing
+- **3 API Keys**: Redundancy with automatic failover on rate limits
+- **Database Tracking**: `supadata_job_id` and `processing_status` columns
+
+**Processing Flow:**
+1. **Small Files (90%)**: Immediate transcript return and processing
+2. **Large Files (10%)**: Job ID returned, stored with `processing_status = 'pending_async'`
+3. **User Polling**: Manual "Check Pending" button polls job status
+4. **Completion**: Finished jobs update transcripts and trigger summary generation
 
 **Related Files:**
-- `src/lib/jobProcessor.ts` - Transcript generation logic
-- `src/app/api/transcripts/generate/route.ts` - Transcript API endpoint
+- `src/lib/jobProcessor.ts` - Consolidated transcript generation
+- `src/app/api/transcripts/poll-pending/route.ts` - Async job polling
+- `src/app/settings/page.tsx` - Pending transcripts UI
+- `database-migration.sql` - Schema update for async support
 
 **Data Models:**
-- `transcripts` table - Generated transcripts with source tracking
+- `transcripts` table - Enhanced with `supadata_job_id` and `processing_status`
 
 ### 9. User Account Management
 

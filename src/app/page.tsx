@@ -1,28 +1,62 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { LoginForm } from '@/components/auth/LoginForm'
 import { SignupForm } from '@/components/auth/SignupForm'
 import { Layout } from '@/components/layout/Layout'
 import { useAuth } from '@/components/auth/AuthProvider'
+import { supabase } from '@/lib/supabase'
 
 export default function HomePage() {
   const [isSignUp, setIsSignUp] = useState(false)
+  const [checkingCreators, setCheckingCreators] = useState(false)
   const { user, loading } = useAuth()
+  const router = useRouter()
 
-  if (loading) {
+  // Check if user has creators and redirect to dashboard if they do
+  useEffect(() => {
+    const checkCreators = async () => {
+      if (!user || loading) return
+      
+      setCheckingCreators(true)
+      try {
+        const { data: creators } = await supabase
+          .from('favorite_creators')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .limit(1)
+
+        if (creators && creators.length > 0) {
+          // User has creators, redirect to dashboard
+          router.push('/dashboard')
+          return
+        }
+      } catch (err) {
+        // If error checking creators, stay on current page
+        console.error('Error checking creators:', err)
+      } finally {
+        setCheckingCreators(false)
+      }
+    }
+
+    checkCreators()
+  }, [user, loading, router])
+
+  if (loading || checkingCreators) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-pink-200 border-t-pink-500 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600">{loading ? 'Loading...' : 'Checking your creators...'}</p>
         </div>
       </div>
     )
   }
 
-  // If user is authenticated, show the dashboard content
+  // If user is authenticated but has no creators, show onboarding
   if (user) {
     return (
       <Layout>

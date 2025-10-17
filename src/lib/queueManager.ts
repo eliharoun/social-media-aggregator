@@ -75,7 +75,13 @@ export class DatabaseQueueManager {
       .insert({
         user_id: userId,
         job_type: 'content_fetch',
-        job_data: { creator, session_id: sessionId },
+        job_data: { 
+          creator: { 
+            ...creator, 
+            id: creator.id // Ensure the creator ID is accessible for the unique constraint
+          }, 
+          session_id: sessionId 
+        },
         status: 'pending',
         priority
       })

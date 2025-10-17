@@ -72,7 +72,6 @@ export async function POST(request: NextRequest) {
       transcript => !existingSummaryContentIds.has(transcript.content_id)
     )
 
-
     if (!transcriptsWithoutSummaries || transcriptsWithoutSummaries.length === 0) {
       return NextResponse.json({
         message: 'All transcripts already have summaries',

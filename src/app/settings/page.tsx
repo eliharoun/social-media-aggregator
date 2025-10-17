@@ -40,11 +40,19 @@ export default function SettingsPage() {
   const [message, setMessage] = useState('')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [isGeneratingSummaries, setIsGeneratingSummaries] = useState(false)
+  const [isPollingPending, setIsPollingPending] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
+  const [pollResults, setPollResults] = useState<{
+    message?: string;
+    summary?: { completed: number; stillPending: number; failed: number; processed: number; total: number };
+    results?: Array<{ title: string; message: string; status: string; content_id: string }>;
+  } | null>(null)
   const router = useRouter()
   const { progress, isActive: isQueueActive, startProgressTracking, stopProgressTracking } = useQueueProgress()
 
   useEffect(() => {
     loadSettings()
+    loadPendingCount()
   }, [])
 
   // Auto-save when settings change
@@ -178,6 +186,18 @@ export default function SettingsPage() {
     }
   }
 
+  const loadPendingCount = async () => {
+    try {
+      const response = await fetch('/api/transcripts/poll-pending')
+      if (response.ok) {
+        const data = await response.json()
+        setPendingCount(data.pendingCount || 0)
+      }
+    } catch (err) {
+      // Ignore errors for pending count
+    }
+  }
+
   const generateMissingSummaries = async () => {
     setIsGeneratingSummaries(true)
     try {
@@ -213,6 +233,51 @@ export default function SettingsPage() {
       setMessage('Failed to queue summary generation')
       setTimeout(() => setMessage(''), 3000)
       setIsGeneratingSummaries(false)
+    }
+  }
+
+  const pollPendingTranscripts = async () => {
+    setIsPollingPending(true)
+    setPollResults(null)
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch('/api/transcripts/poll-pending', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setPollResults(result)
+        
+        if (result.summary?.completed > 0) {
+          setMessage(`✅ ${result.summary.completed} transcripts completed! New summaries are being generated.`)
+        } else if (result.summary?.stillPending > 0) {
+          setMessage(`⏳ ${result.summary.stillPending} transcripts still processing. Check again in a few minutes.`)
+        } else if (result.summary?.failed > 0) {
+          setMessage(`❌ ${result.summary.failed} transcripts failed. They may need to be retried later.`)
+        } else {
+          setMessage('All pending transcripts have been processed!')
+        }
+        
+        // Refresh pending count
+        loadPendingCount()
+        setTimeout(() => setMessage(''), 8000)
+      } else {
+        setMessage('Failed to poll pending transcripts')
+        setTimeout(() => setMessage(''), 3000)
+      }
+    } catch (err) {
+      setMessage('Failed to poll pending transcripts')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setIsPollingPending(false)
     }
   }
 
@@ -495,6 +560,67 @@ export default function SettingsPage() {
             <h2 className="text-xl font-semibold text-gray-800 mb-6">Data Management</h2>
             
             <div className="space-y-6">
+              {/* Process Pending Transcripts */}
+              <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                <h3 className="font-medium text-blue-800 mb-2">Process Pending Transcripts</h3>
+                <p className="text-sm text-blue-700 mb-4">
+                  {pendingCount > 0 
+                    ? `${pendingCount} transcript${pendingCount > 1 ? 's are' : ' is'} being processed by Supadata. Click to check their status and complete any finished jobs.`
+                    : 'Check for transcripts that are being processed by Supadata in the background. These are typically large videos that take longer to process.'
+                  }
+                </p>
+                <button
+                  onClick={pollPendingTranscripts}
+                  disabled={isPollingPending}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isPollingPending ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Checking Status...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      {pendingCount > 0 ? `Check Pending (${pendingCount})` : 'Check for Pending Transcripts'}
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Poll Results */}
+              {pollResults && (
+                <div className="border border-green-200 rounded-lg p-4 bg-green-50">
+                  <h3 className="font-medium text-green-800 mb-2">Polling Results</h3>
+                  <div className="text-sm text-green-700 space-y-1">
+                    <p>✅ Completed: {pollResults.summary?.completed || 0}</p>
+                    <p>⏳ Still Processing: {pollResults.summary?.stillPending || 0}</p>
+                    <p>❌ Failed: {pollResults.summary?.failed || 0}</p>
+                    <p>📊 Total Processed: {pollResults.summary?.processed || 0}</p>
+                  </div>
+                  {pollResults.message && (
+                    <p className="text-sm text-green-600 mt-2 font-medium">{pollResults.message}</p>
+                  )}
+                  {pollResults.results && pollResults.results.length > 0 && (
+                    <details className="mt-3">
+                      <summary className="cursor-pointer text-green-800 font-medium">View Details</summary>
+                      <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                        {pollResults.results.map((result, index: number) => (
+                          <div key={index} className="text-xs bg-green-100 rounded p-2">
+                            <span className="font-medium">{result.title || 'Unknown'}</span> - {result.message || 'No message'}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                  {!pollResults.results || pollResults.results.length === 0 && (
+                    <p className="text-sm text-green-600 mt-2">No detailed results available</p>
+                  )}
+                </div>
+              )}
+
               {/* Generate Missing Summaries */}
               <div className="border border-purple-200 rounded-lg p-4 bg-purple-50">
                 <h3 className="font-medium text-purple-800 mb-2">Generate Missing Summaries</h3>

@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS public.transcripts (
   webvtt_data TEXT,
   language TEXT DEFAULT 'en',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  supadata_job_id TEXT, -- For async job tracking
+  processing_status TEXT DEFAULT 'completed' CHECK (processing_status IN ('completed', 'pending_async', 'failed')),
   UNIQUE(content_id) -- Ensures one transcript per content item
 );
 
@@ -70,7 +72,7 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
   max_content_per_creator INTEGER DEFAULT 10,
   auto_refresh_enabled BOOLEAN DEFAULT TRUE,
   refresh_interval_hours INTEGER DEFAULT 6,
-  enabled_platforms TEXT[] DEFAULT ARRAY['tiktok'],
+  enabled_platforms TEXT[] DEFAULT ARRAY['tiktok', 'youtube', 'instagram'],
   auto_expand_summaries BOOLEAN DEFAULT FALSE,
   youtube_max_video_length_minutes INTEGER DEFAULT 30, -- Maximum YouTube video length to process
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -402,9 +404,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_job_per_content
 ON public.processing_jobs(job_type, user_id, (job_data->>'content_id'))
 WHERE job_data->>'content_id' IS NOT NULL;
 
--- Create unique index for content_fetch jobs (no content_id for these)
+-- Create unique index for content_fetch jobs (use creator username and platform)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_content_fetch_job 
-ON public.processing_jobs(job_type, user_id, (job_data->'creator'->>'id'))
+ON public.processing_jobs(job_type, user_id, (job_data->'creator'->>'username'), (job_data->'creator'->>'platform'))
 WHERE job_type = 'content_fetch';
 
 -- Processing Sessions Table (tracks overall progress for user refresh operations)

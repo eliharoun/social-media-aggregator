@@ -18,11 +18,6 @@ const YOUTUBE_RAPIDAPI_KEYS = [
   process.env.YOUTUBE_RAPIDAPI_KEY_3!,
 ]
 
-// Transcript API configuration (reuse existing)
-const TRANSCRIPT_API_KEYS = [
-  process.env.TRANSCRIPT_API_KEY_1!,
-  process.env.TRANSCRIPT_API_KEY_2!,
-]
 
 // Supadata AI configuration (multiple keys for redundancy)
 const SUPADATA_API_KEYS = [
@@ -186,13 +181,13 @@ export class JobProcessor {
 
         await this.queueManager.addTranscriptJob(
           job.user_id,
-          video.id, // Use database ID from cached content
+          (video as VideoContent & { id: string }).id, // Use database ID from cached content
           video.content_url,
           priority
         )
-      } catch (error) {
+      } catch {
         // Continue with other videos if one fails to queue
-        console.error(`Failed to queue transcript job for ${video.id}:`, error)
+        continue
       }
     }
   }
@@ -202,20 +197,47 @@ export class JobProcessor {
     if (!content_id || !content_url) throw new Error('Content data missing from job')
 
     // Generate transcript with timeout
-    const transcriptData = await this.generateTranscriptWithTimeout(content_url, 6000)
+    const transcriptData = await this.generateTranscriptWithTimeout(content_url, 6000) as (TranscriptResult & { jobId?: string })
     
+    // Handle async job IDs (Phase 2)
+    if (!transcriptData.has_transcript && 'jobId' in transcriptData && transcriptData.jobId) {
+      // Store job ID for later polling
+      const { error: transcriptError } = await this.supabase
+        .from('transcripts')
+        .upsert({
+          content_id,
+          transcript_text: '', // Empty for now
+          webvtt_data: '',
+          language: 'en',
+          supadata_job_id: transcriptData.jobId,
+          processing_status: 'pending_async'
+        }, {
+          onConflict: 'content_id',
+          ignoreDuplicates: false
+        })
+
+      if (transcriptError) {
+        throw new Error(`Failed to store async transcript job: ${transcriptError.message}`)
+      }
+
+      // No summary job created yet - will be created when transcript completes
+      return
+    }
+
+    // Handle immediate transcripts
     if (!transcriptData.has_transcript) {
       throw new Error('No transcript generated for content')
     }
 
-    // Store transcript using UPSERT (already implemented)
+    // Store transcript using UPSERT
     const { data: transcript, error: transcriptError } = await this.supabase
       .from('transcripts')
       .upsert({
         content_id,
         transcript_text: transcriptData.transcript,
         webvtt_data: transcriptData.webvtt,
-        language: 'en'
+        language: 'en',
+        processing_status: 'completed'
       }, {
         onConflict: 'content_id',
         ignoreDuplicates: false
@@ -501,153 +523,86 @@ export class JobProcessor {
   }
 
   private async generateTranscript(contentUrl: string): Promise<TranscriptResult> {
-    // Check if it's a YouTube URL
-    if (contentUrl.includes('youtube.com/watch')) {
-      return this.generateYouTubeTranscript(contentUrl)
-    }
-    
-    // Existing TikTok transcript logic
-    for (let i = 0; i < TRANSCRIPT_API_KEYS.length; i++) {
-      try {
-        const response = await fetch(
-          'https://scriptadmin.tokbackup.com/v1/tiktok/fetchMultipleTikTokData?get_transcript=true&ip=54.240.198.36',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': TRANSCRIPT_API_KEYS[i],
-            },
-            body: JSON.stringify({ videoUrls: [contentUrl] }),
-          }
-        )
-
-        if (response.ok) {
-          const data = await response.json()
-          
-          if (data.data && data.data.length > 0) {
-            const video = data.data[0]
-            
-            // Extract transcript from WebVTT format
-            let transcript = ''
-            if (video.subtitles) {
-              transcript = video.subtitles
-                .split('\n')
-                .filter((line: string) => line && !line.includes('-->') && !line.startsWith('WEBVTT') && !line.match(/^\d{2}:\d{2}:\d{2}/))
-                .join(' ')
-                .trim()
-            }
-            
-            return {
-              transcript,
-              webvtt: video.subtitles || '',
-              has_transcript: !!transcript
-            }
-          }
-        }
-      } catch {
-        continue
-      }
-    }
-    
-    throw new Error('Failed to generate transcript from all APIs')
+    // Use single Supadata API for all platforms (TikTok, YouTube, Instagram)
+    return this.generateSupadataTranscript(contentUrl)
   }
 
-  private async generateYouTubeTranscript(contentUrl: string): Promise<TranscriptResult> {
-    try {
-      // Extract video ID from URL
-      const videoId = contentUrl.match(/[?&]v=([^&]+)/)?.[1]
-      if (!videoId) throw new Error('Invalid YouTube URL')
-
-      // Try primary method: youtube-captions-scraper
-      try {
-        const { getSubtitles } = await import('youtube-captions-scraper')
-        
-        const captions = await getSubtitles({
-          videoID: videoId,
-          lang: 'en'
-        })
-
-        if (captions && captions.length > 0) {
-          const transcript = captions.map(caption => caption.text).join(' ')
-          const webvtt = this.convertToWebVTT(captions)
-          
-          return {
-            transcript,
-            webvtt,
-            has_transcript: !!transcript
-          }
-        }
-      } catch (primaryError) {
-        console.log('Primary transcript method failed, trying fallback:', primaryError)
-      }
-
-      // Fallback method: NoteGPT API
-      try {
-        const transcript = await this.fetchYouTubeTranscriptFallback(videoId)
-        
-        return {
-          transcript,
-          webvtt: '', // NoteGPT doesn't provide WebVTT format
-          has_transcript: !!transcript
-        }
-      } catch (fallbackError) {
-        console.log('Fallback transcript method failed:', fallbackError)
+  private async generateSupadataTranscript(contentUrl: string): Promise<TranscriptResult> {
+    // Use Supadata general transcript API for all platforms (TikTok, YouTube, Instagram)
+    // Rate limit: 1 request per second per API key
+    
+    for (let i = 0; i < SUPADATA_API_KEYS.length; i++) {
+      // Add delay between API key attempts to respect rate limits (1 req/sec)
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1200)) // 1.2 second delay
       }
       
-      return {
-        transcript: '',
-        webvtt: '',
-        has_transcript: false
-      }
-    } catch (error) {
-      throw new Error(`Failed to get YouTube transcript: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    }
-  }
+      let retryCount = 0
+      const maxRetries = 3
+      
+      while (retryCount < maxRetries) {
+        try {
+          const { Supadata } = await import('@supadata/js')
+          
+          const supadata = new Supadata({
+            apiKey: SUPADATA_API_KEYS[i],
+          })
 
-  private async fetchYouTubeTranscriptFallback(videoId: string): Promise<string> {
-    // Cycle through multiple Supadata API keys for better reliability
-    for (let i = 0; i < SUPADATA_API_KEYS.length; i++) {
-      try {
-        // Use Supadata AI for YouTube transcript generation
-        const { Supadata } = await import('@supadata/js')
-        
-        const supadata = new Supadata({
-          apiKey: SUPADATA_API_KEYS[i],
-        })
-
-        const transcriptResult = await supadata.youtube.transcript({
-          url: `https://www.youtube.com/watch?v=${videoId}`,
-          lang: 'en'
-        })
+          // Use the general transcript method - works for TikTok, YouTube, Instagram
+          const transcriptResult = await supadata.transcript({
+            url: contentUrl,
+            lang: 'en',
+            text: true, // Return plain text instead of timestamped chunks
+            mode: 'auto' // Let Supadata auto-detect the platform
+          })
 
         // Check if we got a transcript directly or a job ID for async processing
         if ('jobId' in transcriptResult) {
-          // For large files, we get a job ID and need to poll for results
-          // For now, we'll skip async processing to keep it simple
-          throw new Error('Video too large for synchronous processing')
+          // Phase 2: Store job ID for later polling
+          return {
+            transcript: '',
+            webvtt: '',
+            has_transcript: false,
+            jobId: transcriptResult.jobId // Return job ID for storage
+          } as TranscriptResult & { jobId: string }
         } else {
           // For smaller files, we get the transcript directly
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const result = transcriptResult as any
-          
-          if (result.content && Array.isArray(result.content) && result.content.length > 0) {
-            // Convert transcript content to plain text
-            const transcriptText = result.content
-              .map((chunk: { text: string }) => chunk.text)
-              .join(' ')
-            return transcriptText
-          } else {
-            throw new Error('No transcript content returned from Supadata')
+          const transcript = typeof transcriptResult === 'string' 
+            ? transcriptResult 
+            : (transcriptResult as unknown as { content?: string; text?: string }).content || 
+              (transcriptResult as unknown as { content?: string; text?: string }).text || 
+              JSON.stringify(transcriptResult)
+            
+          return {
+            transcript,
+            webvtt: '', // Supadata doesn't provide WebVTT format
+            has_transcript: !!transcript
           }
         }
-      } catch (error) {
-        console.log(`Supadata API key ${i + 1} failed:`, error instanceof Error ? error.message : 'Unknown error')
-        // Continue to next API key
-        continue
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          
+          // Handle rate limiting with exponential backoff
+          if (errorMessage.includes('Limit Exceeded') || errorMessage.includes('rate limit')) {
+            retryCount++
+            if (retryCount < maxRetries) {
+              const backoffDelay = Math.pow(2, retryCount) * 1000 // 2s, 4s, 8s
+              console.log(`Rate limited, retrying in ${backoffDelay}ms (attempt ${retryCount}/${maxRetries})`)
+              await new Promise(resolve => setTimeout(resolve, backoffDelay))
+              continue // Retry with same API key
+            }
+          }
+          
+          // For other errors or max retries exceeded, try next API key
+          if (errorMessage.includes('Video too large')) {
+            throw error // Don't retry for videos that are too large
+          }
+          break // Move to next API key
+        }
       }
     }
     
-    throw new Error('All Supadata API keys failed')
+    throw new Error('Failed to generate transcript from Supadata API - all keys exhausted')
   }
 
   private convertToWebVTT(captions: { start: number; dur: number; text: string }[]): string {
@@ -818,11 +773,8 @@ If any section has no relevant information, use an empty array [] or "neutral" f
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async cacheVideosToDatabase(videos: VideoContent[], userId: string): Promise<any[]> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cachedVideos: any[] = []
+  private async cacheVideosToDatabase(videos: VideoContent[], _userId: string): Promise<VideoContent[]> {
+    const cachedVideos: VideoContent[] = []
     
     // Process videos in batches to avoid overwhelming the database
     const BATCH_SIZE = 10

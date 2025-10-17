@@ -32,22 +32,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get all active creators for the user
+    // Get user settings to check enabled platforms
+    const { data: userSettings } = await supabase
+      .from('user_settings')
+      .select('enabled_platforms')
+      .eq('user_id', user.id)
+      .single()
+
+    const enabledPlatforms = userSettings?.enabled_platforms || ['tiktok', 'youtube', 'instagram']
+
+    // Get all active creators for the user, filtered by enabled platforms
     const { data: creators, error: creatorsError } = await supabase
       .from('favorite_creators')
       .select('*')
       .eq('user_id', user.id)
       .eq('is_active', true)
+      .in('platform', enabledPlatforms)
 
     if (creatorsError || !creators || creators.length === 0) {
       return NextResponse.json({
-        message: 'No active creators found',
+        message: enabledPlatforms.length === 0 
+          ? 'No platforms enabled in settings'
+          : 'No active creators found for enabled platforms',
         sessionId: null,
         jobsQueued: 0,
         estimatedTime: 0,
-        processingTime: Date.now() - startTime
+        processingTime: Date.now() - startTime,
+        enabledPlatforms
       })
     }
+
 
     // Create queue manager
     const queueManager = new DatabaseQueueManager(

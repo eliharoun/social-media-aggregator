@@ -53,7 +53,7 @@ export default function DashboardPage() {
       filtered = filtered.filter(item => !readItems.includes(item.id))
     }
 
-    // Sort filter
+    // Sort filter - use created_at for content creation time
     switch (filters.sortBy) {
       case 'newest':
         filtered.sort((a, b) => {
