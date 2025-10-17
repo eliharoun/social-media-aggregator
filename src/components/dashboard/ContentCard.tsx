@@ -287,15 +287,34 @@ ${content.content_url}`
             </span>
           </div>
           
-          {/* Processing Status Indicator - Hide when summary is available */}
-          {processingStatus && !summary && (
-            <div className="flex-shrink-0">
-              <ProcessingIndicator 
-                status={processingStatus} 
-                size="sm"
-              />
-            </div>
-          )}
+          {/* Processing Status Indicator - Show based on actual completion state */}
+          {(() => {
+            // Check actual database state
+            const hasTranscript = !!transcript
+            const hasSummary = !!summary
+            const isFullyProcessed = hasTranscript && hasSummary
+            const isProcessing = processingStatus?.isProcessing || false
+            const hasError = processingStatus?.error
+            
+            // Show indicator if content is not fully processed or has errors
+            if (!isFullyProcessed || hasError || isProcessing) {
+              return (
+                <div className="flex-shrink-0">
+                  <ProcessingIndicator 
+                    status={{
+                      hasTranscript,
+                      hasSummary,
+                      isProcessing,
+                      error: hasError
+                    }}
+                    size="sm"
+                  />
+                </div>
+              )
+            }
+            
+            return null
+          })()}
         </div>
 
         {/* Content Layout */}
