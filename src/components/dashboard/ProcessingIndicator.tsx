@@ -1,6 +1,6 @@
 'use client'
 
-import { ProcessingStatus } from '@/hooks/useContentProcessing'
+import { ProcessingStatus } from '@/types/processing'
 
 interface ProcessingIndicatorProps {
   status: ProcessingStatus

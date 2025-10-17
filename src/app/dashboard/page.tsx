@@ -6,7 +6,6 @@ import { Layout } from '@/components/layout/Layout'
 import { ContentCard } from '@/components/dashboard/ContentCard'
 import { InfiniteScrollContainer } from '@/components/dashboard/InfiniteScrollContainer'
 import { Content, supabase } from '@/lib/supabase'
-import { useContentProcessing } from '@/hooks/useContentProcessing'
 
 interface DashboardState {
   allContent: Content[]
@@ -35,9 +34,7 @@ export default function DashboardPage() {
 
   const [userSettings, setUserSettings] = useState<{ auto_expand_summaries: boolean } | null>(null)
   const [readItems, setReadItems] = useState<string[]>([])
-  const [showFiltersModal, setShowFiltersModal] = useState(false)
 
-  const { processPage, getStatus, resetStatus, isProcessing } = useContentProcessing()
 
   // Apply filters to content
   const getFilteredContent = (content: Content[]) => {
@@ -184,7 +181,6 @@ export default function DashboardPage() {
 
   const refreshEntireFeed = async () => {
     setFeedState(prev => ({ ...prev, isRefreshing: true }))
-    resetStatus()
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -245,11 +241,8 @@ export default function DashboardPage() {
         isLoadingMore: false
       }))
 
-      // Auto-process new page
-      if (nextPageContent.length > 0) {
-        const contentIds = nextPageContent.map(item => item.id)
-        processPage(contentIds)
-      }
+      // Content is automatically processed by the background queue system
+      // No need to manually trigger processing
 
     } catch (err) {
       console.error('Failed to load next page:', err)
@@ -266,18 +259,11 @@ export default function DashboardPage() {
       <div className="max-w-4xl mx-auto px-4 py-8">
 
         {/* Processing Status */}
-        {(feedState.isRefreshing || isProcessing) && (
+        {feedState.isRefreshing && (
           <div className="mb-6">
-            {feedState.isRefreshing && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-700 text-sm text-center">
-                🔄 Refreshing content from creators...
-              </div>
-            )}
-            {isProcessing && !feedState.isRefreshing && (
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-purple-700 text-sm text-center">
-                📝 Processing summaries for current page...
-              </div>
-            )}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-700 text-sm text-center">
+              🔄 Refreshing content from creators...
+            </div>
           </div>
         )}
 
@@ -503,14 +489,29 @@ export default function DashboardPage() {
               enablePullToRefresh={true}
             >
               <div className="grid gap-6">
-                {filteredDisplayedContent.map((item) => (
-                  <ContentCard 
-                    key={`content-${item.id}`}
-                    content={item} 
-                    processingStatus={getStatus(item.id)}
-                    autoExpandSummary={userSettings?.auto_expand_summaries || false}
-                  />
-                ))}
+                {filteredDisplayedContent.map((item) => {
+                  // Derive processing status from database content
+                  const contentWithRelations = item as Content & {
+                    transcripts?: Array<{ id: string; transcript_text: string; language: string }>
+                    summaries?: Array<{ id: string; summary: string; key_points: string[]; sentiment: string; topics: string[] }>
+                  }
+                  
+                  const processingStatus = {
+                    hasTranscript: !!(contentWithRelations.transcripts?.length),
+                    hasSummary: !!(contentWithRelations.summaries?.length),
+                    isProcessing: false, // Background queue handles processing
+                    error: undefined
+                  }
+                  
+                  return (
+                    <ContentCard 
+                      key={`content-${item.id}`}
+                      content={item} 
+                      processingStatus={processingStatus}
+                      autoExpandSummary={userSettings?.auto_expand_summaries || false}
+                    />
+                  )
+                })}
               </div>
             </InfiniteScrollContainer>
           </div>

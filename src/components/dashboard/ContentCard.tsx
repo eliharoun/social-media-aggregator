@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { Content, supabase } from '@/lib/supabase'
 import { Modal } from '@/components/ui/Modal'
-import { ProcessingStatus } from '@/hooks/useContentProcessing'
+import { ProcessingStatus } from '@/types/processing'
 import { ProcessingIndicator } from './ProcessingIndicator'
 
 interface Summary {

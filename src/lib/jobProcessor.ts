@@ -1,8 +1,6 @@
 import { DatabaseQueueManager } from './queueManager'
 import { ProcessingJob } from './supabase'
-import { ChatOpenAI } from '@langchain/openai'
-import { ChatAnthropic } from '@langchain/anthropic'
-import { PromptTemplate } from '@langchain/core/prompts'
+import { summarizationService, ContentMetadata } from './summarizationService'
 
 // TikTok API configuration (reuse existing)
 const RAPIDAPI_KEYS = [
@@ -631,146 +629,37 @@ export class JobProcessor {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async generateSummaryWithTimeout(transcriptText: string, contentMetadata: any, timeoutMs: number): Promise<SummaryResult> {
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Summary generation timeout')), timeoutMs)
-    })
-
-    const summaryPromise = this.generateSummary(transcriptText, contentMetadata)
-
-    return Promise.race([summaryPromise, timeoutPromise])
+    // Use shared summarization service
+    const isLongForm = contentMetadata.platform === 'youtube' && transcriptText.length > 5000
+    
+    const metadata: ContentMetadata = {
+      creator_username: contentMetadata.creator_username,
+      platform: contentMetadata.platform,
+      title: contentMetadata.title,
+      caption: contentMetadata.caption
+    }
+    
+    return summarizationService.generateSummaryWithTimeout(
+      transcriptText,
+      metadata,
+      timeoutMs,
+      { isLongForm }
+    )
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async generateSummary(transcriptText: string, contentMetadata: any): Promise<SummaryResult> {
-    const llm = this.createLLMInstance()
-    
-    // Choose prompt based on platform and content length
+    // Use shared summarization service
     const isLongForm = contentMetadata.platform === 'youtube' && transcriptText.length > 5000
-    const promptTemplate = isLongForm ? this.getLongFormPrompt() : this.getStandardPrompt()
     
-    const prompt = await promptTemplate.format({
-      creator: contentMetadata.creator_username,
+    const metadata: ContentMetadata = {
+      creator_username: contentMetadata.creator_username,
       platform: contentMetadata.platform,
       title: contentMetadata.title,
-      caption: contentMetadata.caption,
-      transcript: transcriptText
-    })
-
-    const response = await llm.invoke(prompt)
+      caption: contentMetadata.caption
+    }
     
-    let summaryData: SummaryResult
-    try {
-      summaryData = JSON.parse(response.content as string)
-    } catch {
-      // Fallback if JSON parsing fails
-      summaryData = {
-        summary: (response.content as string).substring(0, 500),
-        key_points: [],
-        sentiment: 'neutral',
-        topics: []
-      }
-    }
-
-    return summaryData
-  }
-
-  private getStandardPrompt(): PromptTemplate {
-    return PromptTemplate.fromTemplate(`
-You are an expert content analyst specializing in social media video transcripts. Your goal is to extract maximum value from transcripts so users can quickly understand the content without watching the video.
-
-## Content Metadata
-- Creator: @{creator}
-- Platform: {platform}
-- Title: {title}
-- Caption: {caption}
-
-## Transcript
-{transcript}
-
-## Instructions
-Analyze the transcript and provide a comprehensive yet concise summary that captures:
-
-1. **Summary**: A clear 2-4 sentence overview that captures the main message and purpose of the content. Focus on what the creator wants the audience to know or do.
-
-2. **Key Points**: Extract 3-7 of the most important takeaways, insights, or arguments. Prioritize:
-   - Actionable advice or recommendations
-   - Notable facts, statistics, or data mentioned
-   - Core arguments or claims
-   - Important examples or case studies
-   - Controversial or unique perspectives
-
-3. **Topics/Categories**: List 2-4 main topics or themes that best categorize this content
-
-## Output Format
-Respond ONLY with valid JSON. No markdown formatting, no code blocks, just raw JSON in this exact structure:
-
-{{
-  "summary": "string",
-  "key_points": ["string"],
-  "sentiment": "positive|negative|neutral",
-  "topics": ["string"]
-}}
-
-If any section has no relevant information, use an empty array [] or "neutral" for sentiment.
-`)
-  }
-
-  private getLongFormPrompt(): PromptTemplate {
-    return PromptTemplate.fromTemplate(`
-You are an expert content analyst specializing in long-form educational and informational video content. Your goal is to create comprehensive summaries that capture the depth and structure of detailed content.
-
-## Content Metadata
-- Creator: @{creator}
-- Platform: {platform} (Long-form content)
-- Title: {title}
-- Caption: {caption}
-
-## Transcript
-{transcript}
-
-## Instructions
-Analyze this long-form transcript and provide a structured summary optimized for educational/informational content:
-
-1. **Summary**: A comprehensive 4-6 sentence overview that captures the main thesis, key arguments, and conclusions. Focus on the educational value and main learning objectives.
-
-2. **Key Points**: Extract 5-10 of the most important insights, organized by importance. Prioritize:
-   - Main concepts and definitions
-   - Step-by-step processes or methodologies
-   - Important data, research findings, or statistics
-   - Practical applications and examples
-   - Conclusions and recommendations
-   - Common misconceptions addressed
-
-3. **Topics/Categories**: List 3-5 main topics or themes, including subtopics where relevant
-
-## Output Format
-Respond ONLY with valid JSON. No markdown formatting, no code blocks, just raw JSON in this exact structure:
-
-{{
-  "summary": "string",
-  "key_points": ["string"],
-  "sentiment": "positive|negative|neutral",
-  "topics": ["string"]
-}}
-
-If any section has no relevant information, use an empty array [] or "neutral" for sentiment.
-`)
-  }
-
-  private createLLMInstance() {
-    if (DEFAULT_LLM_PROVIDER === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
-      return new ChatAnthropic({
-        apiKey: process.env.ANTHROPIC_API_KEY,
-        model: 'claude-3-haiku-20240307', // Cost-optimized model
-        temperature: 0.3,
-      })
-    } else {
-      return new ChatOpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-        model: 'gpt-4o-mini', // Cost-optimized model
-        temperature: 0.3,
-      })
-    }
+    return summarizationService.generateSummary(transcriptText, metadata, { isLongForm })
   }
 
   private async cacheVideosToDatabase(videos: VideoContent[], _userId: string): Promise<VideoContent[]> {
