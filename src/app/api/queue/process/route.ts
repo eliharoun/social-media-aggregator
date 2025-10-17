@@ -4,7 +4,7 @@ import { JobProcessor } from '@/lib/jobProcessor'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
-  const PROCESSING_TIMEOUT = 8000 // 8 seconds to stay within Vercel limits
+  const PROCESSING_TIMEOUT = 25000 // 25 seconds to allow parallel summary processing
   
   try {
     // Create queue manager (use service role for background processing)
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     const jobTypeConfigs = [
       { type: 'content_fetch', batchSize: 3, parallel: false }, // Keep sequential for external API calls
       { type: 'transcript', batchSize: 5, parallel: true },     // Moderate parallelization
-      { type: 'summary', batchSize: 8, parallel: true }        // High parallelization for AI calls
+      { type: 'summary', batchSize: 12, parallel: true }       // Increased parallelization for AI calls
     ]
     
     for (const config of jobTypeConfigs) {
@@ -32,10 +32,12 @@ export async function POST(request: NextRequest) {
       if (jobs.length === 0) continue
 
       if (config.parallel) {
-        // Process jobs in parallel for better performance
+        // Process jobs in parallel for better performance with dynamic timeouts
         const jobPromises = jobs.map(async (job) => {
           try {
-            await jobProcessor.processJobWithTimeout(job, 6000) // 6s timeout per job for parallel processing
+            // Use appropriate timeout based on job type
+            const timeout = job.job_type === 'summary' ? 12000 : 10000 // 10s for summaries, 6s for transcripts
+            await jobProcessor.processJobWithTimeout(job, timeout)
             return { 
               jobId: job.id, 
               jobType: job.job_type, 

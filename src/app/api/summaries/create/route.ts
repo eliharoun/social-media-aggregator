@@ -32,17 +32,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { transcriptIds } = await request.json()
-    if (!transcriptIds || !Array.isArray(transcriptIds)) {
-      return NextResponse.json({ error: 'Transcript IDs required' }, { status: 400 })
+    const { transcriptIds, directSummary } = await request.json()
+    
+    let transcripts = []
+    
+    if (directSummary) {
+      // Handle direct summary request from polling endpoint
+      transcripts = [{
+        id: 'direct',
+        transcript_text: directSummary.transcript_text,
+        content: {
+          id: directSummary.content_id,
+          creator_username: directSummary.content_metadata.creator_username,
+          platform: directSummary.content_metadata.platform,
+          title: directSummary.content_metadata.title,
+          caption: directSummary.content_metadata.caption
+        }
+      }]
+    } else if (transcriptIds && Array.isArray(transcriptIds)) {
+      const { data: transcriptData } = await supabase
+        .from('transcripts')
+        .select('*, content(*)')
+        .in('id', transcriptIds)
+
+      transcripts = transcriptData || []
+    } else {
+      return NextResponse.json({ error: 'Transcript IDs or direct summary required' }, { status: 400 })
     }
 
-    const { data: transcripts } = await supabase
-      .from('transcripts')
-      .select('*, content(*)')
-      .in('id', transcriptIds)
-
-    if (!transcripts) {
+    if (transcripts.length === 0) {
       return NextResponse.json({ error: 'No transcripts found' }, { status: 404 })
     }
 

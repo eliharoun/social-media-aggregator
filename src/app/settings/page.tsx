@@ -191,7 +191,7 @@ export default function SettingsPage() {
       const response = await fetch('/api/transcripts/poll-pending')
       if (response.ok) {
         const data = await response.json()
-        setPendingCount(data.pendingCount || 0)
+        setPendingCount(data.totalPendingCount || data.pendingCount || 0)
       }
     } catch (err) {
       // Ignore errors for pending count
@@ -598,25 +598,35 @@ export default function SettingsPage() {
                     <p>✅ Completed: {pollResults.summary?.completed || 0}</p>
                     <p>⏳ Still Processing: {pollResults.summary?.stillPending || 0}</p>
                     <p>❌ Failed: {pollResults.summary?.failed || 0}</p>
-                    <p>📊 Total Processed: {pollResults.summary?.processed || 0}</p>
+                    <p>📊 Total Processed: {pollResults.summary?.processed || 0} / {pollResults.summary?.total || 0}</p>
                   </div>
                   {pollResults.message && (
                     <p className="text-sm text-green-600 mt-2 font-medium">{pollResults.message}</p>
                   )}
+                  
+
                   {pollResults.results && pollResults.results.length > 0 && (
                     <details className="mt-3">
-                      <summary className="cursor-pointer text-green-800 font-medium">View Details</summary>
+                      <summary className="cursor-pointer text-green-800 font-medium">View Processing Details ({pollResults.results.length} items)</summary>
                       <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
                         {pollResults.results.map((result, index: number) => (
-                          <div key={index} className="text-xs bg-green-100 rounded p-2">
-                            <span className="font-medium">{result.title || 'Unknown'}</span> - {result.message || 'No message'}
+                          <div key={index} className={`text-xs rounded p-2 ${
+                            result.status === 'completed' ? 'bg-green-100 text-green-800' :
+                            result.status === 'failed' || result.status === 'error' ? 'bg-red-100 text-red-800' :
+                            result.status === 'queued' ? 'bg-blue-100 text-blue-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            <div className="font-medium">{result.title || 'Unknown Title'}</div>
+                            <div>Status: {result.status}</div>
+                            <div>Message: {result.message || 'No message'}</div>
                           </div>
                         ))}
                       </div>
                     </details>
                   )}
-                  {!pollResults.results || pollResults.results.length === 0 && (
-                    <p className="text-sm text-green-600 mt-2">No detailed results available</p>
+                  
+                  {(!pollResults.results || pollResults.results.length === 0) && pollResults.summary?.total === 0 && (
+                    <p className="text-sm text-green-600 mt-2">ℹ️ No pending transcripts found - all videos have transcripts!</p>
                   )}
                 </div>
               )}

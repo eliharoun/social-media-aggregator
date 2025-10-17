@@ -71,7 +71,24 @@ export class JobProcessor {
     this.supabase = (queueManager as any).supabase
   }
 
-  async processJobWithTimeout(job: ProcessingJob, timeoutMs = 8000): Promise<void> {
+  async processJobWithTimeout(job: ProcessingJob, timeoutMs?: number): Promise<void> {
+    // Dynamic timeout based on job type
+    if (!timeoutMs) {
+      switch (job.job_type) {
+        case 'transcript':
+          timeoutMs = 25000 // 25 seconds for transcript jobs (long videos need more time)
+          break
+        case 'summary':
+          timeoutMs = 15000 // 15 seconds for summary jobs
+          break
+        case 'content_fetch':
+          timeoutMs = 10000 // 10 seconds for content fetch jobs
+          break
+        default:
+          timeoutMs = 8000 // Default 8 seconds
+      }
+    }
+
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => reject(new Error('Job processing timeout')), timeoutMs)
     })
@@ -87,8 +104,114 @@ export class JobProcessor {
       await this.queueManager.markJobCompleted(job.id)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      await this.queueManager.markJobFailed(job.id, errorMessage, true)
-      throw error
+      
+      // For timeout errors on transcript jobs, try to gracefully handle by creating async job
+      if (job.job_type === 'transcript' && errorMessage.includes('timeout')) {
+        try {
+          await this.handleTranscriptTimeout(job)
+          await this.queueManager.markJobCompleted(job.id)
+          return
+        } catch (fallbackError) {
+          // If fallback also fails, mark as failed with detailed error
+          const { content_id, content_url } = job.job_data
+          const fallbackErrorMsg = fallbackError instanceof Error ? fallbackError.message : 'Unknown error'
+          const detailedError = `Transcript generation timed out after ${timeoutMs/1000}s, fallback to async processing also failed. Content: ${content_id} URL: ${content_url} Fallback error: ${fallbackErrorMsg}. This video may be too large or the transcription API is overloaded. Try again later or check if the video URL is accessible.`
+          await this.queueManager.markJobFailed(job.id, detailedError, true)
+          throw error
+        }
+      } else {
+        await this.queueManager.markJobFailed(job.id, errorMessage, true)
+        throw error
+      }
+    }
+  }
+
+  private async handleTranscriptTimeout(job: ProcessingJob): Promise<void> {
+    const { content_id, content_url } = job.job_data
+    if (!content_id || !content_url) throw new Error('Content data missing from job')
+
+    // When transcript generation times out, try to create an async job instead
+    try {
+      const { Supadata } = await import('@supadata/js')
+      
+      // Use first available API key for timeout fallback
+      const supadata = new Supadata({
+        apiKey: SUPADATA_API_KEYS[0],
+      })
+
+      // Try to create an async job for this video
+      const transcriptResult = await supadata.transcript({
+        url: content_url,
+        lang: 'en',
+        text: true,
+        mode: 'auto'
+      })
+
+      // If we get a job ID, store it for async processing
+      if ('jobId' in transcriptResult) {
+        const { error: transcriptError } = await this.supabase
+          .from('transcripts')
+          .upsert({
+            content_id,
+            transcript_text: '', // Empty for now
+            webvtt_data: '',
+            language: 'en',
+            supadata_job_id: transcriptResult.jobId,
+            processing_status: 'pending_async'
+          }, {
+            onConflict: 'content_id',
+            ignoreDuplicates: false
+          })
+
+        if (transcriptError) {
+          throw new Error(`Failed to store async transcript job: ${transcriptError.message}`)
+        }
+
+        console.log(`Successfully created async transcript job for content ${content_id} after timeout`)
+        return
+      } else {
+        // If we get immediate result, process it
+        const transcript = typeof transcriptResult === 'string' 
+          ? transcriptResult 
+          : (transcriptResult as unknown as { content?: string; text?: string }).content || 
+            (transcriptResult as unknown as { content?: string; text?: string }).text || 
+            JSON.stringify(transcriptResult)
+
+        if (transcript) {
+          // Store completed transcript
+          await this.supabase
+            .from('transcripts')
+            .upsert({
+              content_id,
+              transcript_text: transcript,
+              webvtt_data: '',
+              language: 'en',
+              processing_status: 'completed'
+            }, {
+              onConflict: 'content_id',
+              ignoreDuplicates: false
+            })
+
+          console.log(`Successfully recovered from timeout and stored transcript for content ${content_id}`)
+          return
+        }
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      console.log(`Timeout fallback also failed for content ${content_id}:`, error)
+      
+      // Provide specific error based on the failure type
+      if (errorMessage.includes('rate limit') || errorMessage.includes('Limit Exceeded')) {
+        throw new Error(`Timeout fallback failed: Transcription API rate limit exceeded. Try again in a few minutes when rate limits reset.`)
+      } else if (errorMessage.includes('Video too large')) {
+        throw new Error(`Timeout fallback failed: Video file is too large for transcription. Consider using shorter videos or splitting long content.`)
+      } else if (errorMessage.includes('network') || errorMessage.includes('timeout')) {
+        throw new Error(`Timeout fallback failed: Network connectivity issues with transcription API. Check internet connection and try again.`)
+      } else if (errorMessage.includes('authentication') || errorMessage.includes('unauthorized')) {
+        throw new Error(`Timeout fallback failed: Transcription API authentication error. Check API keys configuration.`)
+      } else {
+        throw new Error(`Timeout fallback failed: ${errorMessage}. The video may be inaccessible or the transcription service is temporarily unavailable.`)
+      }
     }
   }
 
@@ -194,8 +317,8 @@ export class JobProcessor {
     const { content_id, content_url } = job.job_data
     if (!content_id || !content_url) throw new Error('Content data missing from job')
 
-    // Generate transcript with timeout
-    const transcriptData = await this.generateTranscriptWithTimeout(content_url, 6000) as (TranscriptResult & { jobId?: string })
+    // Generate transcript with timeout - increased for long videos
+    const transcriptData = await this.generateTranscriptWithTimeout(content_url, 20000) as (TranscriptResult & { jobId?: string })
     
     // Handle async job IDs (Phase 2)
     if (!transcriptData.has_transcript && 'jobId' in transcriptData && transcriptData.jobId) {
